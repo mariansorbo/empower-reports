@@ -1,0 +1,79 @@
+name: Run One_new.py (diagnóstico)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_seconds:
+        description: "Esperar X seg tras ejecutar (0 = no)"
+        required: false
+        default: "0"
+
+defaults:
+  run:
+    shell: powershell   # PS 5.1 en tu VM
+
+jobs:
+  run-on-vm:
+    runs-on: [self-hosted, windows, gui]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo (con LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Resolver Python y mostrar versión
+        run: |
+          $py = ""
+          $cmd = Get-Command py.exe -ErrorAction SilentlyContinue
+          if ($cmd) { $py = $cmd.Source }
+          if (-not $py) {
+            $candidatos = @(
+              "C:\Python311\python.exe",
+              "C:\Program Files\Python311\python.exe",
+              "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+            )
+            foreach ($c in $candidatos) { if (Test-Path $c) { $py = $c; break } }
+          }
+          if (-not $py) { Write-Error "No se encontró Python"; exit 1 }
+          & $py -V
+          "PY_PATH=$py" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Ejecutar One_new.py (bloqueante, captura salida/errores)
+        run: |
+          $logDir = "C:\Temp\RunnerLogs"
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+          $rel    = "DMV Automation - 10 Jun V2/One_new.py"
+          $script = Join-Path $env:GITHUB_WORKSPACE $rel
+          Write-Host "WORKSPACE: $env:GITHUB_WORKSPACE"
+          Write-Host "SCRIPT REL: $rel"
+          Write-Host "SCRIPT ABS: $script"
+
+          if (-not (Test-Path $script)) { Write-Error "No existe: $script"; exit 1 }
+
+          $workdir = Split-Path $script
+          Set-Location $workdir
+          Write-Host "PWD: $(Get-Location)"
+
+          $log = Join-Path $logDir "one_new.log"
+
+          # Ejecuta EN PRIMER PLANO y espera a que termine
+          & $env:PY_PATH "$script" *>> $log
+          $code = $LASTEXITCODE
+          Write-Host "ExitCode=$code"
+          "ExitCode=$code" | Out-File -FilePath (Join-Path $logDir "one_new_exitcode.txt")
+
+          if ($code -ne 0) { Write-Error "El script devolvió código $code" }
+
+          $wait = [int]"${{ github.event.inputs.wait_seconds }}"
+          if ($wait -gt 0) { Start-Sleep -Seconds $wait }
+
+      - name: Subir logs como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-logs
+          path: C:\Temp\RunnerLogs\*
+          if-no-files-found: warn
