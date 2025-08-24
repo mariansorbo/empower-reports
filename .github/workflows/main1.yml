@@ -25,7 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r "${{ github.workspace }}/DMV Automation - 10 Jun V2/requirements.txt"
-        shell: pwsh
+        shell: powershell
 
       # 4. Ejecuta el script y captura logs
       - name: Ejecutar One_new.py
