@@ -10,7 +10,7 @@ on:
 
 defaults:
   run:
-    shell: powershell   # PS 5.1 en tu VM
+    shell: powershell   # Windows PowerShell 5.1 en tu VM
 
 jobs:
   run-on-vm:
@@ -23,24 +23,41 @@ jobs:
         with:
           lfs: true
 
-      - name: Resolver Python y mostrar versión
+      - name: (Opcional) Instalar dependencias si hay requirements.txt
         run: |
-          $py = ""
-          $cmd = Get-Command py.exe -ErrorAction SilentlyContinue
-          if ($cmd) { $py = $cmd.Source }
-          if (-not $py) {
-            $candidatos = @(
+          $req = Join-Path $env:GITHUB_WORKSPACE 'requirements.txt'
+          if (Test-Path $req) {
+            Write-Host "Instalando dependencias de $req"
+            $pipPy = @(
+              "C:\Python312\python.exe",
               "C:\Python311\python.exe",
+              "C:\Program Files\Python312\python.exe",
               "C:\Program Files\Python311\python.exe",
+              "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
               "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
-            )
-            foreach ($c in $candidatos) { if (Test-Path $c) { $py = $c; break } }
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $pipPy) { Write-Error "No se encontró python.exe para pip"; exit 1 }
+            & $pipPy -m pip install -r $req
+          } else {
+            Write-Host "No hay requirements.txt; continúo…"
           }
-          if (-not $py) { Write-Error "No se encontró Python"; exit 1 }
+
+      - name: Resolver Python (forzar python.exe)
+        run: |
+          $candidatos = @(
+            "C:\Python312\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Program Files\Python312\python.exe",
+            "C:\Program Files\Python311\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+          )
+          $py = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $py) { Write-Error "No se encontró python.exe en rutas conocidas"; exit 1 }
           & $py -V
           "PY_PATH=$py" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Ejecutar One_new.py (bloqueante, captura salida/errores)
+      - name: Ejecutar One_new.py (bloqueante; traza y logs)
         run: |
           $logDir = "C:\Temp\RunnerLogs"
           New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -59,21 +76,5 @@ jobs:
 
           $log = Join-Path $logDir "one_new.log"
 
-          # Ejecuta EN PRIMER PLANO y espera a que termine
-          & $env:PY_PATH "$script" *>> $log
-          $code = $LASTEXITCODE
-          Write-Host "ExitCode=$code"
-          "ExitCode=$code" | Out-File -FilePath (Join-Path $logDir "one_new_exitcode.txt")
-
-          if ($code -ne 0) { Write-Error "El script devolvió código $code" }
-
-          $wait = [int]"${{ github.event.inputs.wait_seconds }}"
-          if ($wait -gt 0) { Start-Sleep -Seconds $wait }
-
-      - name: Subir logs como artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: runner-logs
-          path: C:\Temp\RunnerLogs\*
-          if-no-files-found: warn
+          # Ejecuta y duplica stdout/err a consola y archivo (unbuffered)
+          & $env:PY_PATH -u "$script" 2_
