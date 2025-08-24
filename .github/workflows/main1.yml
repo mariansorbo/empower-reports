@@ -31,32 +31,33 @@ jobs:
       - name: Ejecutar One_new.py
         id: run_script
         run: |
-          # Define la ruta del log de forma dinámica
+          # Solución 1: Forzar codificación UTF-8 en PowerShell
+          $OutputEncoding = [System.Text.Encoding]::UTF8
+
           $logDir = "C:\Temp\RunnerLogs"
           New-Item -ItemType Directory -Force -Path $logDir
           $logFile = Join-Path $logDir "one_new_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-          
-          Write-Output "Iniciando el script de Python..."
-          Write-Output "El log se guardará en: $logFile"
+    
+          Write-Output "[INFO] Iniciando el script de Python..."
+          Write-Output "[INFO] El log se guardara en: $logFile"
 
-          # Ejecuta el script y redirige la salida
+          # Ejecuta el script. El `Traceback` se guardará en $logFile
           python -u "One_new.py" 2>&1 | Tee-Object -FilePath $logFile
-          
-          # Comprueba el código de salida y falla el job si es necesario
+    
+          # Comprueba si el script falló
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "El script de Python falló con código $LASTEXITCODE."
+            Write-Error "[ERROR] El script de Python fallo con codigo $LASTEXITCODE."
+      
+            # Solución 2: Muestra el contenido completo del log para ver el Traceback
+            Write-Output "--- CONTENIDO DEL LOG DE ERRORES ---"
+            Get-Content $logFile
+            Write-Output "------------------------------------"
+      
+            # Falla el paso del workflow
             exit 1
           }
 
-          Write-Output "Script finalizado con éxito."
+          Write-Output "[SUCCESS] Script finalizado con exito."
         shell: powershell
-        # Establece el directorio de trabajo a la carpeta del script
         working-directory: "${{ github.workspace }}/DMV Automation - 10 Jun V2"
-
-      # 5. (Opcional pero recomendado) Sube el log como un artefacto
-      - name: Subir log como artefacto
-        if: always() # Se ejecuta incluso si el paso anterior falla
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-one-new
-          path: C:\Temp\RunnerLogs\*.log
+        # Solución 1 (parte de Python): Establece la variable de entorno
