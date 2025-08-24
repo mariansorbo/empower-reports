@@ -36,19 +36,19 @@ jobs:
           New-Item -ItemType Directory -Force -Path $logDir
           $logFile = Join-Path $logDir "one_new_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
           
-          Write-Output "✅ Iniciando el script de Python..."
-          Write-Output "📝 El log se guardará en: $logFile"
+          Write-Output "Iniciando el script de Python..."
+          Write-Output "El log se guardará en: $logFile"
 
           # Ejecuta el script y redirige la salida
           python -u "One_new.py" 2>&1 | Tee-Object -FilePath $logFile
           
           # Comprueba el código de salida y falla el job si es necesario
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ El script de Python falló con código $LASTEXITCODE."
+            Write-Error "El script de Python falló con código $LASTEXITCODE."
             exit 1
           }
 
-          Write-Output "✅ Script finalizado con éxito."
+          Write-Output "Script finalizado con éxito."
         shell: powershell
         # Establece el directorio de trabajo a la carpeta del script
         working-directory: "${{ github.workspace }}/DMV Automation - 10 Jun V2"
