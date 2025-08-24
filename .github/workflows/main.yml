@@ -1,0 +1,12 @@
+name: Test Runner
+on:
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: [self-hosted, windows, gui]
+    steps:
+      - name: Hola desde la VM
+        shell: pwsh
+        run: |
+          "$env:procesadorvm - $env:Mariano - Runner OK"
