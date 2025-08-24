@@ -1,0 +1,95 @@
+name: Debug One_new
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_seconds:
+        description: "Esperar X seg tras lanzar Notepad y el script"
+        required: false
+        default: "10"
+
+defaults:
+  run:
+    shell: powershell    # Windows PowerShell 5.1
+
+jobs:
+  debug:
+    runs-on: [self-hosted, windows, gui]
+    timeout-minutes: 30
+
+    steps:
+      - name: Info de entorno
+        run: |
+          "VM=$env:COMPUTERNAME  USER=$env:USERNAME"
+          "PWD=$(Get-Location)"
+
+      - name: Confirmar Python (ruta y versión)
+        id: py
+        run: |
+          $logDir = "C:\Temp\RunnerLogs"
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+          $py = ""
+          $cmd = Get-Command py.exe -ErrorAction SilentlyContinue
+          if ($cmd) { $py = $cmd.Source }
+          if (-not $py) {
+            $candidatos = @(
+              "C:\Python311\python.exe",
+              "C:\Program Files\Python311\python.exe",
+              "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+            )
+            foreach ($c in $candidatos) { if (Test-Path $c) { $py = $c; break } }
+          }
+          if (-not $py) { Write-Error "No se encontró Python. Ajustá la ruta."; exit 1 }
+
+          "PY_PATH=$py" | Out-File -FilePath $env:GITHUB_ENV -Append
+          & $py -V | Tee-Object -FilePath "$logDir\python_version.txt"
+
+      - name: Test rápido GUI (Notepad 5s)
+        run: |
+          $sec = 5
+          $p = Start-Process -FilePath "notepad.exe" -PassThru
+          "Notepad PID: $($p.Id)"
+          Start-Sleep -Seconds $sec
+          try { Stop-Process -Id $p.Id -Force } catch {}
+
+      - name: Probar Python mínimo (crea archivo)
+        run: |
+          $logDir = "C:\Temp\RunnerLogs"
+          $testOut = "$logDir\python_smoke.txt"
+          & $env:PY_PATH -c "import pathlib, time; p=pathlib.Path(r'$testOut'); p.write_text('ok'); print('wrote', p); time.sleep(1)" *>> "$logDir\python_smoke.log"
+          Get-Item $testOut
+
+      - name: Ejecutar One_new.py (bloqueante y con log)
+        run: |
+          $logDir = "C:\Temp\RunnerLogs"
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+          $script = "C:\Users\Mariano\Documents\DMV Automation - 10 Jun V2\One_new.py"
+          if (-not (Test-Path $script)) { Write-Error "No existe el script: $script"; exit 1 }
+          $workdir = Split-Path $script
+          Set-Location $workdir
+
+          # Ejecutar en primer plano y capturar salida/errores
+          & $env:PY_PATH "$script" *>> "$logDir\one_new.log"
+          $code = $LASTEXITCODE
+          "ExitCode=$code" | Tee-Object -FilePath "$logDir\one_new_exitcode.txt"
+          if ($code -ne 0) { Write-Error "El script devolvió código $code" }
+
+      - name: Esperar para ver GUI (opcional)
+        if: ${{ inputs.wait_seconds != '0' }}
+        run: |
+          Start-Sleep -Seconds ([int]"${{ github.event.inputs.wait_seconds }}")
+
+      - name: Listar procesos python
+        if: always()
+        run: |
+          Get-Process python,py -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,MainWindowTitle | Format-Table
+
+      - name: Subir logs como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-logs
+          path: C:\Temp\RunnerLogs\*
+          if-no-files-found: warn
