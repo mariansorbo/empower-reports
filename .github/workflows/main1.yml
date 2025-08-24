@@ -49,7 +49,7 @@ jobs:
           }
 
           Write-Output "✅ Script finalizado con éxito."
-        shell: pwsh
+        shell: powershell
         # Establece el directorio de trabajo a la carpeta del script
         working-directory: "${{ github.workspace }}/DMV Automation - 10 Jun V2"
 
