@@ -7,6 +7,6 @@ jobs:
     runs-on: [self-hosted, windows, gui]
     steps:
       - name: Hola desde la VM
-        shell: pwsh
+        shell: powershell
         run: |
           "$env:procesadorvm - $env:Mariano - Runner OK"
