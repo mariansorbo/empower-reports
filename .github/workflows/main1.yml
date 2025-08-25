@@ -53,7 +53,7 @@ jobs:
           Write-Host "[INFO] Log -> $logFile"
 
           # Ejecuta Python del setup (ruta estable) y duplica stdout+stderr
-          & "$env:PythonLocation\python.exe" -u ".\One_new.py" 2>&1 | Tee-Object -FilePath $logFile
+          & "$env:PythonLocation\python.exe" -u ".\Test.py" 2>&1 | Tee-Object -FilePath $logFile
           $code = $LASTEXITCODE
 
           if ($code -ne 0) {
