@@ -1,0 +1,19 @@
+name: Run Test2.py on VM
+
+on:
+  workflow_dispatch:   # se ejecuta manualmente desde Actions
+
+jobs:
+  run-test2:
+    runs-on: [self-hosted, windows, gui]
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Ejecutar Test2.py directamente
+        run: |
+          $script = "C:\Users\Mariano\Documents\DMV Automation - 10 Jun V2\Test2.py"
+          Write-Host "Ejecutando $script en la VM..."
+          python "$script"
