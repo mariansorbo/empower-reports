@@ -1,0 +1,15 @@
+name: Disparar GUI por Scheduled Task
+
+on: { workflow_dispatch: {} }
+
+jobs:
+  launch:
+    runs-on: [self-hosted, windows, gui]
+    defaults: { run: { shell: powershell } }
+    steps:
+      - name: Disparar tarea en sesión interactiva
+        run: |
+          $t = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(5))
+          Set-ScheduledTask -TaskName "LanzarAppGUI" -Trigger $t
+          Start-ScheduledTask -TaskName "LanzarAppGUI"
+          Write-Host "Tarea lanzada; la app seguirá abierta aunque termine el job."
