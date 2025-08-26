@@ -1,0 +1,117 @@
+name: Run One_new.py (diagnóstico fuerte)
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: powershell  # Windows PowerShell 5.1
+
+jobs:
+  run-on-vm:
+    runs-on: [self-hosted, windows, gui]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo (con LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Imprimir entorno y workspace
+        run: |
+          "VM=$env:COMPUTERNAME  USER=$env:USERNAME"
+          "WORKSPACE=$env:GITHUB_WORKSPACE"
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE" | Select-Object Name,Length | Format-Table
+
+      - name: (Opcional) Instalar requirements.txt si existe
+        run: |
+          $req = Join-Path $env:GITHUB_WORKSPACE 'requirements.txt'
+          if (Test-Path $req) {
+            $py = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+            if (-not $py) {
+              $candidatos = @(
+                "C:\Python312\python.exe","C:\Python311\python.exe",
+                "C:\Program Files\Python312\python.exe","C:\Program Files\Python311\python.exe",
+                "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+                "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+              )
+              $py = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
+            }
+            if (-not $py) { Write-Error "No se encontró python.exe para pip"; exit 1 }
+            & $py -m pip install --upgrade pip
+            & $py -m pip install -r $req
+          } else {
+            "No hay requirements.txt; sigo…"
+          }
+
+      - name: Elegir python.exe y setear env
+        run: |
+          $candidatos = @(
+            "C:\Python312\python.exe","C:\Python311\python.exe",
+            "C:\Program Files\Python312\python.exe","C:\Program Files\Python311\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+          )
+          $python = ($candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1)
+          if (-not $python) { 
+            $g = Get-Command python.exe -ErrorAction SilentlyContinue
+            if ($g) { $python = $g.Source }
+          }
+          if (-not $python) { Write-Error "No se encontró python.exe"; exit 1 }
+
+          & $python -V
+          "PYTHON_PATH=$python"           | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PYTHONUNBUFFERED=1"            | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PYTHONPATH=$env:GITHUB_WORKSPACE" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          "where python:"
+          where.exe python | ForEach-Object { $_ }
+
+      - name: Test GUI (Notepad 3s) para validar sesión interactiva
+        run: |
+          $p = Start-Process -FilePath "notepad.exe" -PassThru -WindowStyle Normal
+          Start-Sleep -Seconds 3
+          try { Stop-Process -Id $p.Id -Force } catch {}
+
+      - name: Ejecutar One_new.py (bloqueante; traza y logs)
+        run: |
+          $logDir = "C:\Temp\RunnerLogs"
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+          $rel    = "DMV Automation - 10 Jun V2/One_new.py"
+          $script = Join-Path $env:GITHUB_WORKSPACE $rel
+
+          "SCRIPT ABS: $script"
+          if (-not (Test-Path $script)) { Write-Error "No existe: $script"; exit 1 }
+
+          $workdir = Split-Path $script
+          Set-Location $workdir
+
+          $log = Join-Path $logDir "one_new.log"
+
+          # Diagnóstico Python antes de correr
+          & $env:PYTHON_PATH - << 'PYCODE' 2>&1 | Tee-Object -FilePath (Join-Path $logDir "env_check.log")
+import sys, os, platform, pathlib
+print("sys.executable=", sys.executable)
+print("sys.version=", sys.version)
+print("cwd=", os.getcwd())
+print("PYTHONPATH=", os.getenv("PYTHONPATH"))
+print("FILES IN CWD:")
+print([p.name for p in pathlib.Path('.').iterdir()])
+PYCODE
+
+          # Ejecutar en primer plano, unbuffered, duplicando stdout+stderr a consola y archivo
+          & $env:PYTHON_PATH -u "$script" 2>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          "ExitCode=$code"
+          "ExitCode=$code" | Out-File -FilePath (Join-Path $logDir "one_new_exitcode.txt")
+          if ($code -ne 0) { Write-Error "El script devolvió código $code" }
+
+      - name: Subir logs como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-logs
+          path: C:\Temp\RunnerLogs\*
+          if-no-files-found: warn
