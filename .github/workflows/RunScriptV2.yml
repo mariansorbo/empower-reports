@@ -8,7 +8,7 @@ env:
   SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new.py"
   LOG_DIR: "C:\\Scripts\\logs"
   TASK_NAME: "LanzarAppGUI"
-  LAUNCH_DELAY_SEC: 5
+  LAUNCH_DELAY_SEC: 5 
 
 jobs:
   launch:
