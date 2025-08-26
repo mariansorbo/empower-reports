@@ -1,0 +1,25 @@
+name: Launch GUI (ephemeral scheduled task)
+on: { workflow_dispatch: {} }
+
+jobs:
+  launch:
+    runs-on: [self-hosted, windows, gui]
+    defaults: { run: { shell: powershell } }
+
+    steps:
+      - name: Crear y lanzar tarea temporal (persistente)
+        run: |
+          $task = "RunGUI_Ephemeral"
+          $pyw  = (Get-Command python.exe).Source -replace 'python.exe$','pythonw.exe'
+          if (-not (Test-Path $pyw)) { throw "No se encontró pythonw.exe en $pyw" }
+
+          $script = 'C:\Users\Mariano\Documents\DMV Automation - 10 Jun V2\Test2.py'  # o One_new.py
+          $action = New-ScheduledTaskAction -Execute $pyw -Argument "`"$script`""
+          $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(5))
+
+          # Ejecutar en sesión interactiva: usuario logueado (sin password -> Run only when user is logged on)
+          try { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+          Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -User $env:USERNAME | Out-Null
+          Start-ScheduledTask -TaskName $task
+
+          Write-Host "Lanzado. La GUI persiste fuera del job."
