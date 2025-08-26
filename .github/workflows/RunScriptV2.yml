@@ -10,10 +10,12 @@ env:
 jobs:
   launch:
     runs-on: [self-hosted, windows, gui]
-    defaults: { run: { shell: powershell } }
+    defaults: 
+      run: 
+        shell: powershell
 
     steps:
-      - name: Configurar acción de LanzarAppGUI
+      - name: Configurar acción de LanzarAppGUI (con log)
         run: |
           $py  = (Get-Command python.exe).Source
           if (-not (Test-Path $py)) { throw "No se encontró python.exe" }
@@ -24,13 +26,15 @@ jobs:
           $ts      = Get-Date -Format 'yyyyMMdd_HHmmss'
           $logFile = Join-Path $logDir ("script_" + $ts + ".log")
 
-          Write-Host "Configurando LanzarAppGUI:"
-          Write-Host "  Script: $script"
-          Write-Host "  Log:    $logFile"
+          # Construimos el comando completo y luego lo metemos entre comillas para /c
+          $cmd = '"{0}" "{1}" > "{2}" 2>&1' -f $py, $script, $logFile
+          $args = '/c "' + $cmd + '"'
 
-          $args = '/c "' + $py + '" "' + $script + '" > "' + $logFile + '" 2>&1'
           $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument $args
           Set-ScheduledTask -TaskName "LanzarAppGUI" -Action $action
+
+          Write-Host "Script configurado: $script"
+          Write-Host "Log configurado en: $logFile"
 
       - name: Disparar LanzarAppGUI
         run: |
