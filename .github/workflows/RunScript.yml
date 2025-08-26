@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
 
 env:
-  SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\Test2.py"
+  #SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\Test2.py"
   # Cambia a:
-  # SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new.py"
+  SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new.py"
 
 jobs:
   launch:
