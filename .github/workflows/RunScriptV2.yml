@@ -1,0 +1,60 @@
+name: Launch GUI Script V2
+
+on: 
+  workflow_dispatch:
+
+env:
+  #SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\Test2.py"
+  SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new.py"
+  LOG_DIR: "C:\\Scripts\\logs"
+  TASK_NAME: "LanzarAppGUI"
+  LAUNCH_DELAY_SEC: 5
+
+jobs:
+  launch:
+    runs-on: [self-hosted, windows, gui]
+    defaults: { run: { shell: powershell } }
+
+    steps:
+      - name: Preparar carpeta de logs
+        run: |
+          New-Item -ItemType Directory -Force -Path "${{ env.LOG_DIR }}" | Out-Null
+
+      - name: Configurar acción de ${{ env.TASK_NAME }} con log
+        run: |
+          $py  = (Get-Command python.exe).Source
+          if (-not (Test-Path $py)) { throw "No se encontró python.exe" }
+
+          $script  = "${{ env.SCRIPT_TO_RUN }}"
+          $logDir  = "${{ env.LOG_DIR }}"
+          $ts      = Get-Date -Format 'yyyyMMdd_HHmmss'
+          $logFile = Join-Path $logDir ("script_" + $ts + ".log")
+
+          Write-Host "Configurando ${{ env.TASK_NAME }}:"
+          Write-Host "  Script: $script"
+          Write-Host "  Log:    $logFile"
+
+          $args = '/c "' + $py + '" "' + $script + '" > "' + $logFile + '" 2>&1'
+          $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument $args
+          Set-ScheduledTask -TaskName "${{ env.TASK_NAME }}" -Action $action
+
+          # exportar ruta de log para step siguiente
+          "LOGFILE=$logFile" | Out-File -Append -FilePath $env:GITHUB_ENV
+
+      - name: Disparar ${{ env.TASK_NAME }}
+        run: |
+          $t = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds($env:LAUNCH_DELAY_SEC))
+          Set-ScheduledTask -TaskName "${{ env.TASK_NAME }}" -Trigger $t
+          Start-ScheduledTask -TaskName "${{ env:Task_NAME }}"
+          Write-Host "Listo: se lanzó ${{ env.SCRIPT_TO_RUN }} (log en $env:LOGFILE)"
+
+      - name: Tail rápido del log
+        if: always()
+        run: |
+          Start-Sleep -Seconds 6
+          if (Test-Path "$env:LOGFILE") {
+            Write-Host "---- Contenido de $env:LOGFILE ----"
+            Get-Content "$env:LOGFILE" -Tail 50
+          } else {
+            Write-Host "No se encontró el log todavía: $env:LOGFILE"
+          }
