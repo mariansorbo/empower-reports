@@ -1,0 +1,94 @@
+name: Start VM & RunOne (dev)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_for_login:
+        description: "Esperar sesión interactiva de 'Mariano' (Autologon)"
+        type: boolean
+        default: true
+      tail_log:
+        description: "Mostrar últimas líneas de C:\\Temp\\joblogs\\one.log"
+        type: boolean
+        default: true
+      stop_after:
+        description: "Apagar (deallocate) al terminar"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start-and-run:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RG: procesadorvm_group
+      VM: procesadorvm
+      USERNAME: mariano
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start VM (idempotente)
+        run: az vm start -g "$RG" -n "$VM" || true
+
+      - name: Esperar PowerState/running
+        run: |
+          for i in {1..120}; do
+            state=$(az vm get-instance-view -g "$RG" -n "$VM" \
+              --query "instanceView.statuses[?starts_with(code,'PowerState/')].code" -o tsv)
+            echo "Estado: $state"
+            [ "$state" = "PowerState/running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando PowerState/running"; exit 1
+
+      - name: Esperar Azure Guest Agent
+        run: |
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" \
+                 --command-id RunPowerShellScript --scripts "hostname" \
+                 --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Guest Agent OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando Guest Agent"; exit 1
+
+      - name: (Opcional) Esperar sesión de 'Mariano'
+        if: ${{ inputs.wait_for_login }}
+        run: |
+          for i in {1..120}; do
+            out=$(az vm run-command invoke -g "$RG" -n "$VM" \
+                  --command-id RunPowerShellScript --scripts "quser" \
+                  --query "value[0].message" -o tsv || true)
+            echo "$out"
+            echo "$out" | grep -i -E "^[[:space:]]*${USERNAME}[[:space:]].*[[:space:]]Active" && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando sesión activa de ${USERNAME}"; exit 1
+
+      - name: Disparar tarea programada 'RunOne'
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts "Start-ScheduledTask -TaskName 'RunOne'"
+
+      - name: (Opcional) Tail del log del job
+        if: ${{ inputs.tail_log }}
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts "Get-Content -LiteralPath 'C:\Temp\joblogs\one.log' -Tail 120" \
+            --query "value[0].message" -o tsv || true
+
+      - name: (Opcional) Apagar VM
+        if: ${{ inputs.stop_after }}
+        run: az vm deallocate -g "$RG" -n "$VM"
