@@ -10,7 +10,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    environment: dev   # 👈 usa los secrets que pusiste en el environment dev
+    environment: dev
     steps:
       - name: Login en Azure (OIDC)
         uses: azure/login@v2
