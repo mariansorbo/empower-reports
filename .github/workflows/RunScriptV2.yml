@@ -5,7 +5,7 @@ on:
 
 env:
   #SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\Test2.py"
-  SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new.py"
+  SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new-Copy2 (2).py"
 
 jobs:
   launch:
