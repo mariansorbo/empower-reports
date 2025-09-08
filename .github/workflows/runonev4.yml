@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       wait_for_login:
-        description: "Verificar sesión interactiva de 'mariano' (autologon)"
+        description: "Verificar/esperar sesión interactiva de 'mariano' (autologon)"
         type: boolean
         default: true
       force_display:
@@ -17,44 +17,36 @@ on:
         default: true
 
 env:
-  # ⬇️ Ajustá tu script si cambia la ruta
   SCRIPT_TO_RUN: "C:\\Users\\mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new-Copy2 (2).py"
-  TASK_NAME: "LanzarAppGUI"
-  LOG_DIR: "C:\\Scripts\\logs"
-  RUN_AS_USER: "mariano"         # nombre corto (sin .\)
+  RUN_AS_USER: "mariano"          # nombre corto, sin .\
   NIRCMD_EXE: "C:\\nircmd.exe"
   RES_W: "1920"
   RES_H: "1080"
   RES_BPP: "32"
+  TASK_NAME_BASE: "LanzarAppGUI"
+  LOG_DIR: "C:\\Scripts\\logs"
+  TASK_WRAPPER_DIR: "C:\\Scripts\\tasks"   # acá guardamos el .cmd wrapper
 
 jobs:
   launch:
-    runs-on: [self-hosted, windows, gui]   # Runner adentro de la VM con escritorio
+    runs-on: [self-hosted, windows, gui]
     defaults:
       run:
         shell: powershell
 
     steps:
-      - name: (Precondición) Verificar sesión interactiva (autologon) o fallar rápido
+      - name: (Opcional) Verificar/esperar sesión interactiva de $env:RUN_AS_USER
         if: ${{ inputs.wait_for_login }}
         run: |
           $u = "${env:RUN_AS_USER}"
-          # quser robusto: soporta '>' delante del usuario y columnas variables
-          $q = (quser | Out-String)
+          $deadline = (Get-Date).AddMinutes(5)
+          do {
+            $q = (quser | Out-String)
+            if ($q -match "(?im)^[\s>]*$([regex]::Escape($u))\b.*\sActive\b") { Write-Host "OK: sesión de $u activa"; exit 0 }
+            Start-Sleep 2
+          } while ((Get-Date) -lt $deadline)
           Write-Host "=== quser ===`n$q"
-          $active = $false; $sid=$null; $sess=$null
-          foreach ($line in ($q -split "`r?`n")) {
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            $clean = $line.TrimStart(' ','>')  # quita '>' y espacios
-            $parts = $clean -split '\s+' | Where-Object { $_ -ne '' }
-            if ($parts.Count -lt 4) { continue }
-            $usr=$parts[0]; $session=$parts[1]; $id=$parts[2]; $state=$parts[3]
-            if ($usr -ieq $u -and ($state -match '^(Active|Activo)$')) { $active=$true; $sid=$id; $sess=$session; break }
-          }
-          if (-not $active) {
-            throw "No hay sesión interactiva de '$u'. Corré antes 'Start VM (force display)' para que el autologon la cree."
-          }
-          Write-Host "OK: Sesión de $u activa → $sess (ID $sid)"
+          throw "No hay sesión interactiva de '$u'. Corré primero el workflow 1 para que el autologon la cree."
 
       - name: (Opcional) Forzar resolución con NirCmd (idempotente)
         if: ${{ inputs.force_display }}
@@ -63,67 +55,81 @@ jobs:
           & "${env:NIRCMD_EXE}" setdisplay ${env:RES_W} ${env:RES_H} ${env:RES_BPP} 2>$null
           Write-Host "Resolución forzada a ${env:RES_W}x${env:RES_H}x${env:RES_BPP}"
 
-      - name: Preparar comando y log
+      - name: Preparar wrapper .cmd, log y nombre de tarea único
         id: prep
         run: |
-          # Resolver Python (python.exe o py.exe)
-          $python = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
-          $usePyLauncher = $false
-          if (-not $python) {
+          # Python (python.exe o py.exe)
+          $py = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+          if (-not $py) {
             $pyLauncher = (Get-Command py.exe -ErrorAction SilentlyContinue).Source
             if (-not $pyLauncher) { throw "No se encontró Python (python.exe/py.exe) en PATH" }
-            $python = $pyLauncher
-            $usePyLauncher = $true
+            $py = "$pyLauncher -3"
           }
 
           $script = "${env:SCRIPT_TO_RUN}"
           if (-not (Test-Path $script)) { throw "No existe el script: $script" }
 
+          # Directorios
           New-Item -ItemType Directory -Force -Path "${env:LOG_DIR}" | Out-Null
+          New-Item -ItemType Directory -Force -Path "${env:TASK_WRAPPER_DIR}" | Out-Null
+
+          # Timestamps y paths
           $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
           $logFile = Join-Path "${env:LOG_DIR}" ("script_" + $ts + ".log")
-          $workDir = Split-Path $script
+          $taskName = "${env:TASK_NAME_BASE}_$ts"
+          $workDir  = Split-Path $script
+          $cmdFile  = Join-Path "${env:TASK_WRAPPER_DIR}" ("run_" + $ts + ".cmd")
 
-          if ($usePyLauncher) {
-            $cmdCore = 'py.exe -3 "{0}"' -f $script
-          } else {
-            $cmdCore = '"{0}" "{1}"' -f $python, $script
-          }
-          # Importante: usar cmd.exe para redirección y setear cwd
-          $cmdLine = 'cd /d "{0}" && {1} > "{2}" 2>&1' -f $workDir, $cmdCore, $logFile
+          # Contenido del wrapper .cmd (cuidado con quoting)
+          $lines = @(
+            '@echo off'
+            'setlocal'
+            'chcp 65001 >nul'
+            ('cd /d "{0}"' -f $workDir)
+            ('{0} "{1}" > "{2}" 2>&1' -f $py, $script, $logFile)
+          )
+          Set-Content -LiteralPath $cmdFile -Value $lines -Encoding ASCII  # ASCII evita BOM
 
-          # Exportar para próximos pasos
+          # Export para pasos siguientes
           "LOG_FILE=$logFile" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CMD_CORE=$cmdLine" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TASK_NAME=$taskName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CMD_FILE=$cmdFile"   | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-          Write-Host "Log: $logFile"
-          Write-Host "CMD: $cmdLine"
+          Write-Host "Tarea: $taskName"
+          Write-Host "Log:   $logFile"
+          Write-Host "CMD:   $cmdFile"
 
-      - name: Crear y ejecutar tarea en la sesión de ${env:RUN_AS_USER} (schtasks /IT)
+      - name: Crear y ejecutar tarea en la sesión de $env:RUN_AS_USER (schtasks /IT con wrapper)
         run: |
-          $tn = "${env:TASK_NAME}"
-          $u  = "${env:RUN_AS_USER}"
-          $cmd= $env:CMD_CORE
+          $tn  = $env:TASK_NAME
+          $u   = $env:RUN_AS_USER
+          $cmd = $env:CMD_FILE
 
           # Borrar si existe
           schtasks /Query /TN "$tn" >$null 2>&1
           if ($LASTEXITCODE -eq 0) { schtasks /Delete /TN "$tn" /F | Out-Null }
 
-          # Iniciar unos segundos en el futuro (HH:mm)
-          $start = (Get-Date).AddSeconds(15).ToString('HH:mm')
+          # Hora unos segundos adelante (HH:mm)
+          $start = (Get-Date).AddSeconds(20).ToString('HH:mm')
 
-          # Crear tarea "one-shot" interactiva (NO pide password; requiere usuario logueado)
-          # Nota: /IT = Run only when user is logged on (in interactive session)
-          schtasks /Create /TN "$tn" /SC ONCE /ST "$start" /TR "cmd.exe /c $cmd" /RL HIGHEST /F /RU "$u" /IT
+          # MUY IMPORTANTE: /TR con comillas alrededor del .cmd
+          $create = schtasks /Create /TN "$tn" /SC ONCE /ST "$start" /TR "\"$cmd\"" /RL HIGHEST /F /RU "$u" /IT
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host $create
+            throw "schtasks /Create falló (usuario debe estar logueado y tener privilegios)."
+          }
 
-          # Ejecutar ya (por si el reloj nos gana)
-          schtasks /Run /TN "$tn"
+          # Ejecutar ya (por si el schedule se pasa)
+          $run = schtasks /Run /TN "$tn"
+          if ($LASTEXITCODE -ne 0) { Write-Host $run }
+
+          # Info de la tarea
+          schtasks /Query /TN "$tn" /V /FO LIST
 
       - name: (Opcional) Tail del log
         if: ${{ inputs.tail_log }}
         run: |
           $logFile = $env:LOG_FILE
-          # Esperar a que aparezca el log (hasta 5 min)
           for ($i=0; $i -lt 300; $i++) {
             if (Test-Path $logFile) { break }
             Start-Sleep 1
