@@ -1,0 +1,147 @@
+name: Start VM (force display)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_for_login:
+        description: "Esperar sesión interactiva de 'Mariano' (Autologon)"
+        type: boolean
+        default: true
+      force_display:
+        description: "Forzar resolución virtual (NirCmd) y fijar sesión con tscon"
+        type: boolean
+        default: true
+      stop_after:
+        description: "Apagar (deallocate) al terminar"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start-and-force-display:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RG: procesadorvm_group
+      VM: procesadorvm
+      USERNAME: Mariano
+      NIRCMD_DIR: C:\Tools\nircmd
+      NIRCMD_EXE: C:\Tools\nircmd\nircmd.exe
+      RES_W: 1920
+      RES_H: 1080
+      RES_BPP: 32
+      TASKNAME: ForceResolutionAtLogon
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start VM (idempotente)
+        run: az vm start -g "$RG" -n "$VM" || true
+
+      - name: Esperar PowerState/running
+        run: |
+          for i in {1..120}; do
+            state=$(az vm get-instance-view -g "$RG" -n "$VM" \
+              --query "instanceView.statuses[?starts_with(code,'PowerState/')].code" -o tsv)
+            echo "Estado: $state"
+            [ "$state" = "PowerState/running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando PowerState/running"; exit 1
+
+      - name: Esperar Azure Guest Agent
+        run: |
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" \
+                 --command-id RunPowerShellScript --scripts "hostname" \
+                 --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Guest Agent OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando Guest Agent"; exit 1
+
+      - name: (Opcional) Esperar sesión interactiva de ${{ env.USERNAME }}
+        if: ${{ inputs.wait_for_login }}
+        run: |
+          for i in {1..180}; do
+            out=$(az vm run-command invoke -g "$RG" -n "$VM" \
+                  --command-id RunPowerShellScript \
+                  --scripts "quser | Out-String" \
+                  --query "value[0].message" -o tsv || true)
+            echo "$out"
+            echo "$out" | grep -i -E "^[[:space:]]*${USERNAME}[[:space:]].*[[:space:]]Active" && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando sesión activa de ${USERNAME}"; exit 1
+
+      - name: (Opcional) Forzar resolución virtual y fijar sesión (NirCmd + tscon)
+        if: ${{ inputs.force_display }}
+        run: |
+          # 1) Instalar/asegurar NirCmd y crear/actualizar la tarea programada para fijar resolución
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
+          $ErrorActionPreference = "Stop"
+          $dir = "${env:NIRCMD_DIR}"
+          $exe = "${env:NIRCMD_EXE}"
+          if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+
+          # Descargar NirCmd si no existe
+          if (-not (Test-Path $exe)) {
+            $zipUrl = "https://www.nirsoft.net/utils/nircmd-x64.zip"
+            $zip    = Join-Path $env:TEMP "nircmd-x64.zip"
+            Invoke-WebRequest -Uri $zipUrl -OutFile $zip
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $dir, $true)
+            Remove-Item $zip -Force
+            # Algunos zips traen nircmdc.exe y nircmd.exe; normalizamos al .exe
+            $cand = Get-ChildItem $dir -Filter "nircmd*.exe" | Select-Object -First 1
+            if ($cand -and ($cand.FullName -ne $exe)) { Copy-Item $cand.FullName $exe -Force }
+          }
+
+          # Crear/actualizar tarea programada ONLOGON para el usuario interactivo
+          $taskName = "${env:TASKNAME}"
+          $w = "${env:RES_W}"; $h = "${env:RES_H}"; $bpp = "${env:RES_BPP}"
+          $arg = "setdisplay $w $h $bpp"
+
+          $action   = New-ScheduledTaskAction -Execute $exe -Argument $arg
+          $trigger  = New-ScheduledTaskTrigger -AtLogOn
+          $principal= New-ScheduledTaskPrincipal -UserId "${env:USERNAME}" -LogonType Interactive -RunLevel Highest
+
+          if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+            Set-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal
+          } else {
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal | Out-Null
+          }
+
+          # Si la sesión ya está activa, ejecutar YA MISMO la tarea
+          try { Start-ScheduledTask -TaskName $taskName } catch { }
+
+          # 2) Fijar la sesión con tscon (mover a consola para que no dependa del RDP)
+          #    Buscamos el SessionId del usuario y hacemos tscon <id> /dest:console
+          $quser = (quser | Out-String)
+          $lines = $quser -split "`r?`n" | Where-Object { $_ -match "^\s*${env:USERNAME}\b" }
+          if ($lines.Count -gt 0) {
+            # quser formato típico: USERNAME SESSIONNAME ID STATE IDLE TIME LOGON TIME
+            $parts = $lines[0] -split "\s+" | Where-Object { $_ -ne "" }
+            # ID suele estar en la 3ra o 4ta columna según si hay SESSIONNAME
+            $id = ($parts | Where-Object { $_ -match "^\d+$" } | Select-Object -First 1)
+            if ($id) {
+              try {
+                tscon $id /dest:console
+              } catch {
+                # Si falla, lo dejamos pasar (algunas ediciones de Windows/Server restringen tscon desde SYSTEM)
+              }
+            }
+          }
+          PS1
+
+      - name: (Opcional) Apagar VM
+        if: ${{ inputs.stop_after }}
+        run: az vm deallocate -g "$RG" -n "$VM"
