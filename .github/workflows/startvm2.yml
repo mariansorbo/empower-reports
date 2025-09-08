@@ -1,4 +1,4 @@
-name: Start VM (force display) 2
+name: Start VM (force display)
 
 on:
   workflow_dispatch:
@@ -27,14 +27,11 @@ jobs:
     env:
       RG: procesadorvm_group
       VM: procesadorvm
-      # Usuario local confirmado por quser
       USER_PRINCIPAL: .\mariano
-      # NirCmd ya copiado una sola vez a esta ruta
       NIRCMD_EXE: C:\nircmd.exe
       RES_W: 1920
       RES_H: 1080
       RES_BPP: 32
-      TASKNAME: ForceResolutionAtLogon
 
     steps:
       - name: Azure login (OIDC)
@@ -85,53 +82,38 @@ jobs:
           done
           echo "Timeout esperando sesión activa de ${USER_SHORT}"; exit 1
 
-      - name: (Opcional) Forzar resolución virtual y fijar sesión (NirCmd + tscon)
+      - name: (Opcional) Forzar resolución virtual (HKLM\\Run) y fijar sesión (tscon)
         if: ${{ inputs.force_display }}
         run: |
           az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
           $ErrorActionPreference = 'Stop'
+          $Nir = if ([string]::IsNullOrWhiteSpace($env:NIRCMD_EXE)) { 'C:\nircmd.exe' } else { $env:NIRCMD_EXE }
+          $W   = if ([string]::IsNullOrWhiteSpace($env:RES_W)) { '1920' } else { $env:RES_W }
+          $H   = if ([string]::IsNullOrWhiteSpace($env:RES_H)) { '1080' } else { $env:RES_H }
+          $Bpp = if ([string]::IsNullOrWhiteSpace($env:RES_BPP)) { '32' } else { $env:RES_BPP }
 
-          $NirCmdExe = if ([string]::IsNullOrWhiteSpace($env:NIRCMD_EXE)) { 'C:\nircmd.exe' } else { $env:NIRCMD_EXE }
-          $ResW      = if ([string]::IsNullOrWhiteSpace($env:RES_W))     { '1920' } else { $env:RES_W }
-          $ResH      = if ([string]::IsNullOrWhiteSpace($env:RES_H))     { '1080' } else { $env:RES_H }
-          $ResBpp    = if ([string]::IsNullOrWhiteSpace($env:RES_BPP))   { '32'   } else { $env:RES_BPP }
-          $TaskName  = if ([string]::IsNullOrWhiteSpace($env:TASKNAME))  { 'ForceResolutionAtLogon' } else { $env:TASKNAME }
-          $UserId    = if ([string]::IsNullOrWhiteSpace($env:USER_PRINCIPAL)) { '.\mariano' } else { $env:USER_PRINCIPAL }
+          if (-not (Test-Path $Nir)) { throw "No se encontró NirCmd en '$Nir'." }
 
-          if (-not (Test-Path $NirCmdExe)) { throw "No se encontró NirCmd: '$NirCmdExe'." }
+          # 1) Ejecutar AHORA MISMO (como SYSTEM; cambia la resolución a nivel sistema)
+          & $Nir setdisplay $W $H $Bpp | Out-Null
 
-          # Acción: fijar resolución
-          $arg      = "setdisplay $ResW $ResH $ResBpp"
-          $action   = New-ScheduledTaskAction -Execute $NirCmdExe -Argument $arg
-          $trigger  = New-ScheduledTaskTrigger -AtLogOn
-          $principal= New-ScheduledTaskPrincipal -UserId $UserId -LogonType Interactive -RunLevel Highest
-          $settings = New-ScheduledTaskSettingsSet -Compatibility Win8
+          # 2) Persistir para cada logon de usuario (sin pelear con SIDs): HKLM\...\Run
+          $runKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+          $name   = 'ForceResolution'
+          $value  = "`"$Nir`" setdisplay $W $H $Bpp"
+          New-ItemProperty -Path $runKey -Name $name -Value $value -PropertyType String -Force | Out-Null
 
-          # Re-registrar (más confiable al cambiar principal)
-          if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
-            try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false } catch {}
-          }
-          Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
-
-          # Ejecutar YA si hay sesión activa del mismo usuario (best-effort)
-          try {
-            $userShort = ($UserId -split '\\')[-1]
-            $q = (quser | Out-String)
-            if ($q -match "^\s*$([regex]::Escape($userShort))\b") { Start-ScheduledTask -TaskName $TaskName }
-          } catch {}
-
-          # Fijar sesión a consola (best-effort)
+          # 3) Best-effort: si hay sesión activa, intentar tscon a consola (no rompe si falla)
           try {
             $q = (quser | Out-String)
-            $userShort = ($UserId -split '\\')[-1]
-            $line = $q -split "`r?`n" | Where-Object { $_ -match "^\s*$([regex]::Escape($userShort))\b" } | Select-Object -First 1
+            $line = $q -split "`r?`n" | Where-Object { $_ -match "Active" } | Select-Object -First 1
             if ($line) {
               $id = ($line -split '\s+' | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1)
               if ($id) { tscon $id /dest:console | Out-Null }
             }
           } catch {}
 
-          Write-Host "OK: $NirCmdExe → ${ResW}x${ResH}x${ResBpp}; tarea '$TaskName' con principal '$UserId'."
+          Write-Host "OK: Resolución ${W}x${H}x${Bpp}; persistido en HKLM:\\...\\Run como '$name'."
           PS1
 
       - name: (Opcional) Apagar VM
