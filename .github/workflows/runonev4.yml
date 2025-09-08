@@ -18,14 +18,14 @@ on:
 
 env:
   SCRIPT_TO_RUN: "C:\\Users\\mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new-Copy2 (2).py"
-  RUN_AS_USER: "mariano"          # nombre corto, sin .\
+  RUN_AS_USER: "mariano"          # nombre corto (sin .\)
   NIRCMD_EXE: "C:\\nircmd.exe"
   RES_W: "1920"
   RES_H: "1080"
   RES_BPP: "32"
   TASK_NAME_BASE: "LanzarAppGUI"
   LOG_DIR: "C:\\Scripts\\logs"
-  TASK_WRAPPER_DIR: "C:\\Scripts\\tasks"   # acá guardamos el .cmd wrapper
+  TASK_WRAPPER_DIR: "C:\\Scripts\\tasks"   # guardamos el .cmd wrapper acá
 
 jobs:
   launch:
@@ -42,43 +42,82 @@ jobs:
           $deadline = (Get-Date).AddMinutes(5)
           do {
             $q = (quser | Out-String)
-            if ($q -match "(?im)^[\s>]*$([regex]::Escape($u))\b.*\sActive\b") { Write-Host "OK: sesión de $u activa"; exit 0 }
+            if ($q -match "(?im)^[\s>]*$([regex]::Escape($u))\b.*\sActive\b") { 
+              Write-Host "OK: sesión de $u activa"; exit 0 
+            }
             Start-Sleep 2
           } while ((Get-Date) -lt $deadline)
           Write-Host "=== quser ===`n$q"
           throw "No hay sesión interactiva de '$u'. Corré primero el workflow 1 para que el autologon la cree."
 
-      - name: Crear y ejecutar tarea en la sesión de $env:RUN_AS_USER (schtasks /IT con wrapper)
+      - name: (Opcional) Forzar resolución con NirCmd (idempotente)
+        if: ${{ inputs.force_display }}
+        run: |
+          if (-not (Test-Path "${env:NIRCMD_EXE}")) { throw "No existe ${env:NIRCMD_EXE}" }
+          & "${env:NIRCMD_EXE}" setdisplay ${env:RES_W} ${env:RES_H} ${env:RES_BPP} 2>$null
+          Write-Host "Resolución forzada a ${env:RES_W}x${env:RES_H}x${env:RES_BPP}"
+
+      - name: Crear wrapper, registrar y ejecutar tarea interactiva (todo en un paso)
+        id: run_gui
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $tn  = $env:TASK_NAME
-          $u   = $env:RUN_AS_USER
-          $cmd = $env:CMD_FILE
+          # --- Resolver Python ---
+          $python = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+          if (-not $python) {
+            $pyLauncher = (Get-Command py.exe -ErrorAction SilentlyContinue).Source
+            if (-not $pyLauncher) { throw "No se encontró Python (python.exe/py.exe) en PATH" }
+            $python = "$pyLauncher -3"
+          }
 
-          # 1) Borrar si existe (best-effort, SIN romper el step)
-          $p = Start-Process -FilePath schtasks -ArgumentList @('/Query','/TN',"$tn") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+          # --- Validar script ---
+          $script = "${env:SCRIPT_TO_RUN}"
+          if (-not (Test-Path $script)) { throw "No existe el script: $script" }
+
+          # --- Rutas / nombres únicos ---
+          New-Item -ItemType Directory -Force -Path "${env:LOG_DIR}" | Out-Null
+          New-Item -ItemType Directory -Force -Path "${env:TASK_WRAPPER_DIR}" | Out-Null
+
+          $ts       = Get-Date -Format 'yyyyMMdd_HHmmss'
+          $taskName = "${env:TASK_NAME_BASE}_$ts"
+          $logFile  = Join-Path "${env:LOG_DIR}" ("script_" + $ts + ".log")
+          $cmdFile  = Join-Path "${env:TASK_WRAPPER_DIR}" ("run_" + $ts + ".cmd")
+          $workDir  = Split-Path $script
+
+          # --- Wrapper .cmd (evita quebraderos de cabeza con comillas/espacios) ---
+          $lines = @(
+            '@echo off'
+            'setlocal'
+            'chcp 65001 >nul'
+            ('cd /d "{0}"' -f $workDir)
+            ('{0} "{1}" > "{2}" 2>&1' -f $python, $script, $logFile)
+          )
+          Set-Content -LiteralPath $cmdFile -Value $lines -Encoding ASCII
+
+          # --- Borrar tarea previa si existe (best-effort) ---
+          $p = Start-Process -FilePath schtasks -ArgumentList @('/Query','/TN',"$taskName") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
           if ($p -and $p.ExitCode -eq 0) {
-            $pDel = Start-Process -FilePath schtasks -ArgumentList @('/Delete','/TN',"$tn",'/F') -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+            Start-Process -FilePath schtasks -ArgumentList @('/Delete','/TN',"$taskName",'/F') -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue | Out-Null
           }
 
-          # 2) Crear tarea one-shot interactiva con wrapper .cmd
+          # --- Crear tarea one-shot interactiva con wrapper ---
           $start = (Get-Date).AddSeconds(20).ToString('HH:mm')
-          $argsCreate = @('/Create','/TN',"$tn",
+          $argsCreate = @('/Create','/TN',"$taskName",
                           '/SC','ONCE','/ST',"$start",
-                          '/TR',"`"$cmd`"",
-                          '/RL','HIGHEST','/F','/RU',"$u","/IT")
+                          '/TR',"`"$cmdFile`"",
+                          '/RL','HIGHEST','/F','/RU',"${env:RUN_AS_USER}",'/IT')
           $pCreate = Start-Process -FilePath schtasks -ArgumentList $argsCreate -NoNewWindow -Wait -PassThru
-          if ($pCreate.ExitCode -ne 0) {
-            throw "schtasks /Create falló con ExitCode=$($pCreate.ExitCode). Asegurate de que '$u' está logueado (autologon)."
-          }
+          if ($pCreate.ExitCode -ne 0) { throw "schtasks /Create falló con ExitCode=$($pCreate.ExitCode). ¿Está logueado '${env:RUN_AS_USER}'?" }
 
-          # 3) Ejecutar ya (por si el reloj se pisa)
-          $pRun = Start-Process -FilePath schtasks -ArgumentList @('/Run','/TN',"$tn") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+          # --- Ejecutar ya ---
+          Start-Process -FilePath schtasks -ArgumentList @('/Run','/TN',"$taskName") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue | Out-Null
 
-          # 4) Info (no romper si falla)
-          $null = Start-Process -FilePath schtasks -ArgumentList @('/Query','/TN',"$tn",'/V','/FO','LIST') -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+          # --- Export para tail ---
+          "LOG_FILE=$logFile"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TASK_NAME=$taskName"| Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CMD_FILE=$cmdFile"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+          Write-Host "OK: tarea '$taskName' creada y lanzada. Log: $logFile"
 
       - name: (Opcional) Tail del log
         if: ${{ inputs.tail_log }}
