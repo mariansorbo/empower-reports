@@ -48,83 +48,37 @@ jobs:
           Write-Host "=== quser ===`n$q"
           throw "No hay sesión interactiva de '$u'. Corré primero el workflow 1 para que el autologon la cree."
 
-      - name: (Opcional) Forzar resolución con NirCmd (idempotente)
-        if: ${{ inputs.force_display }}
-        run: |
-          if (-not (Test-Path "${env:NIRCMD_EXE}")) { throw "No existe ${env:NIRCMD_EXE}" }
-          & "${env:NIRCMD_EXE}" setdisplay ${env:RES_W} ${env:RES_H} ${env:RES_BPP} 2>$null
-          Write-Host "Resolución forzada a ${env:RES_W}x${env:RES_H}x${env:RES_BPP}"
-
-      - name: Preparar wrapper .cmd, log y nombre de tarea único
-        id: prep
-        run: |
-          # Python (python.exe o py.exe)
-          $py = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
-          if (-not $py) {
-            $pyLauncher = (Get-Command py.exe -ErrorAction SilentlyContinue).Source
-            if (-not $pyLauncher) { throw "No se encontró Python (python.exe/py.exe) en PATH" }
-            $py = "$pyLauncher -3"
-          }
-
-          $script = "${env:SCRIPT_TO_RUN}"
-          if (-not (Test-Path $script)) { throw "No existe el script: $script" }
-
-          # Directorios
-          New-Item -ItemType Directory -Force -Path "${env:LOG_DIR}" | Out-Null
-          New-Item -ItemType Directory -Force -Path "${env:TASK_WRAPPER_DIR}" | Out-Null
-
-          # Timestamps y paths
-          $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
-          $logFile = Join-Path "${env:LOG_DIR}" ("script_" + $ts + ".log")
-          $taskName = "${env:TASK_NAME_BASE}_$ts"
-          $workDir  = Split-Path $script
-          $cmdFile  = Join-Path "${env:TASK_WRAPPER_DIR}" ("run_" + $ts + ".cmd")
-
-          # Contenido del wrapper .cmd (cuidado con quoting)
-          $lines = @(
-            '@echo off'
-            'setlocal'
-            'chcp 65001 >nul'
-            ('cd /d "{0}"' -f $workDir)
-            ('{0} "{1}" > "{2}" 2>&1' -f $py, $script, $logFile)
-          )
-          Set-Content -LiteralPath $cmdFile -Value $lines -Encoding ASCII  # ASCII evita BOM
-
-          # Export para pasos siguientes
-          "LOG_FILE=$logFile" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "TASK_NAME=$taskName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CMD_FILE=$cmdFile"   | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-          Write-Host "Tarea: $taskName"
-          Write-Host "Log:   $logFile"
-          Write-Host "CMD:   $cmdFile"
-
       - name: Crear y ejecutar tarea en la sesión de $env:RUN_AS_USER (schtasks /IT con wrapper)
         run: |
+          $ErrorActionPreference = 'Stop'
+
           $tn  = $env:TASK_NAME
           $u   = $env:RUN_AS_USER
           $cmd = $env:CMD_FILE
 
-          # Borrar si existe
-          schtasks /Query /TN "$tn" >$null 2>&1
-          if ($LASTEXITCODE -eq 0) { schtasks /Delete /TN "$tn" /F | Out-Null }
-
-          # Hora unos segundos adelante (HH:mm)
-          $start = (Get-Date).AddSeconds(20).ToString('HH:mm')
-
-          # MUY IMPORTANTE: /TR con comillas alrededor del .cmd
-          $create = schtasks /Create /TN "$tn" /SC ONCE /ST "$start" /TR "\"$cmd\"" /RL HIGHEST /F /RU "$u" /IT
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host $create
-            throw "schtasks /Create falló (usuario debe estar logueado y tener privilegios)."
+          # 1) Borrar si existe (best-effort, SIN romper el step)
+          $p = Start-Process -FilePath schtasks -ArgumentList @('/Query','/TN',"$tn") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+          if ($p -and $p.ExitCode -eq 0) {
+            $pDel = Start-Process -FilePath schtasks -ArgumentList @('/Delete','/TN',"$tn",'/F') -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
           }
 
-          # Ejecutar ya (por si el schedule se pasa)
-          $run = schtasks /Run /TN "$tn"
-          if ($LASTEXITCODE -ne 0) { Write-Host $run }
+          # 2) Crear tarea one-shot interactiva con wrapper .cmd
+          $start = (Get-Date).AddSeconds(20).ToString('HH:mm')
+          $argsCreate = @('/Create','/TN',"$tn",
+                          '/SC','ONCE','/ST',"$start",
+                          '/TR',"`"$cmd`"",
+                          '/RL','HIGHEST','/F','/RU',"$u","/IT")
+          $pCreate = Start-Process -FilePath schtasks -ArgumentList $argsCreate -NoNewWindow -Wait -PassThru
+          if ($pCreate.ExitCode -ne 0) {
+            throw "schtasks /Create falló con ExitCode=$($pCreate.ExitCode). Asegurate de que '$u' está logueado (autologon)."
+          }
 
-          # Info de la tarea
-          schtasks /Query /TN "$tn" /V /FO LIST
+          # 3) Ejecutar ya (por si el reloj se pisa)
+          $pRun = Start-Process -FilePath schtasks -ArgumentList @('/Run','/TN',"$tn") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+
+          # 4) Info (no romper si falla)
+          $null = Start-Process -FilePath schtasks -ArgumentList @('/Query','/TN',"$tn",'/V','/FO','LIST') -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+
 
       - name: (Opcional) Tail del log
         if: ${{ inputs.tail_log }}
