@@ -1,4 +1,4 @@
-name: Start VM (force display)
+name: Start VM (force display) 2
 
 on:
   workflow_dispatch:
