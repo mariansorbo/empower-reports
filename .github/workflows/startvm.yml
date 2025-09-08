@@ -28,12 +28,13 @@ jobs:
       RG: procesadorvm_group
       VM: procesadorvm
       USERNAME: Mariano
-      NIRCMD_DIR: C:\Tools\nircmd
-      NIRCMD_EXE: C:\Tools\nircmd\nircmd.exe
+      # NirCmd fijo en C:\
+      NIRCMD_EXE: C:\nircmd.exe
       RES_W: 1920
       RES_H: 1080
       RES_BPP: 32
       TASKNAME: ForceResolutionAtLogon
+
     steps:
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -85,61 +86,45 @@ jobs:
       - name: (Opcional) Forzar resolución virtual y fijar sesión (NirCmd + tscon)
         if: ${{ inputs.force_display }}
         run: |
-          # 1) Instalar/asegurar NirCmd y crear/actualizar la tarea programada para fijar resolución
           az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
-          $ErrorActionPreference = "Stop"
-          $dir = "${env:NIRCMD_DIR}"
-          $exe = "${env:NIRCMD_EXE}"
-          if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+          $ErrorActionPreference = 'Stop'
 
-          # Descargar NirCmd si no existe
-          if (-not (Test-Path $exe)) {
-            $zipUrl = "https://www.nirsoft.net/utils/nircmd-x64.zip"
-            $zip    = Join-Path $env:TEMP "nircmd-x64.zip"
-            Invoke-WebRequest -Uri $zipUrl -OutFile $zip
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $dir, $true)
-            Remove-Item $zip -Force
-            # Algunos zips traen nircmdc.exe y nircmd.exe; normalizamos al .exe
-            $cand = Get-ChildItem $dir -Filter "nircmd*.exe" | Select-Object -First 1
-            if ($cand -and ($cand.FullName -ne $exe)) { Copy-Item $cand.FullName $exe -Force }
+          # Defaults/ENV
+          $NirCmdExe = if ([string]::IsNullOrWhiteSpace($env:NIRCMD_EXE)) { 'C:\nircmd.exe' } else { $env:NIRCMD_EXE }
+          $ResW      = if ([string]::IsNullOrWhiteSpace($env:RES_W))     { '1920' } else { $env:RES_W }
+          $ResH      = if ([string]::IsNullOrWhiteSpace($env:RES_H))     { '1080' } else { $env:RES_H }
+          $ResBpp    = if ([string]::IsNullOrWhiteSpace($env:RES_BPP))   { '32'   } else { $env:RES_BPP }
+          $UserName  = if ([string]::IsNullOrWhiteSpace($env:USERNAME))  { 'Mariano' } else { $env:USERNAME }
+          $TaskName  = if ([string]::IsNullOrWhiteSpace($env:TASKNAME))  { 'ForceResolutionAtLogon' } else { $env:TASKNAME }
+
+          if (-not (Test-Path $NirCmdExe)) {
+            throw "No se encontró NirCmd en '$NirCmdExe'. Copiá nircmd.exe ahí o ajustá NIRCMD_EXE."
           }
 
-          # Crear/actualizar tarea programada ONLOGON para el usuario interactivo
-          $taskName = "${env:TASKNAME}"
-          $w = "${env:RES_W}"; $h = "${env:RES_H}"; $bpp = "${env:RES_BPP}"
-          $arg = "setdisplay $w $h $bpp"
-
-          $action   = New-ScheduledTaskAction -Execute $exe -Argument $arg
+          # 1) Crear/actualizar tarea ONLOGON (usuario interactivo) que fija la resolución
+          $arg      = "setdisplay $ResW $ResH $ResBpp"
+          $action   = New-ScheduledTaskAction -Execute $NirCmdExe -Argument $arg
           $trigger  = New-ScheduledTaskTrigger -AtLogOn
-          $principal= New-ScheduledTaskPrincipal -UserId "${env:USERNAME}" -LogonType Interactive -RunLevel Highest
+          $principal= New-ScheduledTaskPrincipal -UserId $UserName -LogonType Interactive -RunLevel Highest
 
-          if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-            Set-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal
+          if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+            Set-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal
           } else {
-            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal | Out-Null
+            Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal | Out-Null
           }
 
-          # Si la sesión ya está activa, ejecutar YA MISMO la tarea
-          try { Start-ScheduledTask -TaskName $taskName } catch { }
+          # 2) Si la sesión ya está activa, ejecutar YA la tarea (idempotente)
+          try { Start-ScheduledTask -TaskName $TaskName } catch {}
 
-          # 2) Fijar la sesión con tscon (mover a consola para que no dependa del RDP)
-          #    Buscamos el SessionId del usuario y hacemos tscon <id> /dest:console
-          $quser = (quser | Out-String)
-          $lines = $quser -split "`r?`n" | Where-Object { $_ -match "^\s*${env:USERNAME}\b" }
-          if ($lines.Count -gt 0) {
-            # quser formato típico: USERNAME SESSIONNAME ID STATE IDLE TIME LOGON TIME
-            $parts = $lines[0] -split "\s+" | Where-Object { $_ -ne "" }
-            # ID suele estar en la 3ra o 4ta columna según si hay SESSIONNAME
-            $id = ($parts | Where-Object { $_ -match "^\d+$" } | Select-Object -First 1)
-            if ($id) {
-              try {
-                tscon $id /dest:console
-              } catch {
-                # Si falla, lo dejamos pasar (algunas ediciones de Windows/Server restringen tscon desde SYSTEM)
-              }
-            }
+          # 3) Fijar la sesión con tscon (best-effort)
+          $q = (quser | Out-String)
+          $line = $q -split "`r?`n" | Where-Object { $_ -match "^\s*$([regex]::Escape($UserName))\b" } | Select-Object -First 1
+          if ($line) {
+            $id = ($line -split '\s+' | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1)
+            if ($id) { try { tscon $id /dest:console } catch {} }
           }
+
+          Write-Host "OK: $NirCmdExe → ${ResW}x${ResH}x${ResBpp}; tarea '$TaskName' lista."
           PS1
 
       - name: (Opcional) Apagar VM
