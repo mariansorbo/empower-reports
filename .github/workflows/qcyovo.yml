@@ -1,0 +1,98 @@
+name: Launch GUI Script V3
+
+on:
+  workflow_dispatch:
+
+env:
+  TASK_NAME: "LanzarAppGUI"
+  SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new-Copy2 (2).py"
+  LOG_DIR: "C:\\Scripts\\logs"
+
+jobs:
+  launch:
+    runs-on: [self-hosted, windows, gui]
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Validaciones iniciales (python, tarea, carpetas)
+        run: |
+          $py = (Get-Command python.exe -ErrorAction Stop).Source
+          if (-not (Test-Path $py)) { throw "No se encontró python.exe en PATH" }
+
+          if (-not (Get-ScheduledTask -TaskName "${{ env.TASK_NAME }}" -ErrorAction SilentlyContinue)) {
+            throw "La tarea '${{ env.TASK_NAME }}' no existe. Créala previamente (Ready) y reintenta."
+          }
+
+          if (-not (Test-Path "${{ env.LOG_DIR }}")) {
+            New-Item -ItemType Directory -Force -Path "${{ env.LOG_DIR }}" | Out-Null
+          }
+
+          Write-Host "python.exe: $py"
+          Write-Host "Task: ${{ env.TASK_NAME }}"
+          Write-Host "Script: ${{ env.SCRIPT_TO_RUN }}"
+          Write-Host "LogDir: ${{ env.LOG_DIR }}"
+
+      - name: Configurar acción con log rotativo
+        id: configure_action
+        run: |
+          $py      = (Get-Command python.exe).Source
+          $script  = "${{ env.SCRIPT_TO_RUN }}"
+          $ts      = Get-Date -Format 'yyyyMMdd_HHmmss'
+          $logDir  = "${{ env.LOG_DIR }}"
+          $logFile = Join-Path $logDir ("LanzarAppGUI_{0}.log" -f $ts)
+
+          # Comando interno: python "script.py" > "log" 2>&1
+          $inner = ('"{0}" "{1}" > "{2}" 2>&1' -f $py, $script, $logFile)
+          $args  = '/c ' + $inner
+
+          $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument $args
+
+          # Inyectar acción en la tarea existente
+          Set-ScheduledTask -TaskName "${{ env.TASK_NAME }}" -Action $action
+
+          # Devolver ruta de log a siguientes pasos
+          "logFile=$logFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          Write-Host "Acción actualizada. Log: $logFile"
+
+      - name: Disparar tarea (ahora + 5s) y arrancarla
+        run: |
+          $t = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(5))
+          Set-ScheduledTask -TaskName "${{ env.TASK_NAME }}" -Trigger $t
+          Start-ScheduledTask -TaskName "${{ env.TASK_NAME }}"
+          Write-Host "Disparada: ${{ env.TASK_NAME }}"
+
+      - name: Esperar a que se genere el log y mostrar tail
+        run: |
+          $log = "${{ steps.configure_action.outputs.logFile }}"
+          Write-Host "Esperando log: $log"
+
+          $deadline = (Get-Date).AddMinutes(3)
+          while ((Get-Date) -lt $deadline) {
+            if (Test-Path $log) {
+              # Espera breve para que empiece a escribir
+              Start-Sleep -Seconds 2
+              Write-Host "---- Tail del log ----"
+              Get-Content $log -Tail 200
+              break
+            }
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not (Test-Path $log)) {
+            Write-Host "⚠️  No se encontró el log aún. La tarea puede seguir ejecutándose."
+          }
+
+      - name: Subir log como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: LanzarAppGUI-log
+          path: ${{ steps.configure_action.outputs.logFile }}
+          if-no-files-found: warn
+
+      - name: Estado final de la tarea
+        run: |
+          $info = Get-ScheduledTaskInfo -TaskName "${{ env.TASK_NAME }}"
+          $info | Format-List | Out-String | Write-Host
