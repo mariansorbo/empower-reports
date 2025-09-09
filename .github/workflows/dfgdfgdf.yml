@@ -1,0 +1,35 @@
+name: Launch GUI Script V5
+
+on:
+  workflow_dispatch:
+
+jobs:
+  launch:
+    runs-on: [self-hosted, windows, gui]
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Reajustar LanzarAppGUI (interactivo) y disparar
+        run: |
+          $TaskName = "LanzarAppGUI"
+          $Wrapper  = "C:\Scripts\wrap_LanzarAppGUI.cmd"
+          if (-not (Test-Path $Wrapper)) { throw "Wrapper no existe: $Wrapper" }
+
+          schtasks /Delete /TN "$TaskName" /F 2>$null | Out-Null
+          $start = (Get-Date).AddYears(10).ToString("HH:mm")
+          schtasks /Create /SC ONCE /ST $start /SD 01/01/2099 /TN "$TaskName" /TR "cmd.exe /c \"$Wrapper\"" /RL HIGHEST /IT /F
+          schtasks /Run /TN "$TaskName"
+
+      - name: Tail del último log
+        run: |
+          $log = Get-ChildItem "C:\Scripts\logs\LanzarAppGUI_*.log" -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $log) {
+            Write-Host "⚠️ Aún no hay log. Revisa el Historial de la tarea en el Programador."
+            exit 0
+          }
+          Write-Host "Mostrando: $($log.FullName)"
+          Start-Sleep -Seconds 2
+          Get-Content $log.FullName -Tail 200
