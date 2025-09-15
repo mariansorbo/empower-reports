@@ -1,0 +1,199 @@
+name: Start VM (Autologon + Display + Wait)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_for_login:
+        description: "Esperar sesión interactiva de 'mariano' (Autologon)"
+        type: boolean
+        default: true
+      force_display:
+        description: "Forzar resolución virtual (NirCmd) y fijar sesión con tscon"
+        type: boolean
+        default: true
+      stop_after:
+        description: "Apagar (deallocate) al terminar"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start-and-force-display:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RG: procesadorvm_group
+      VM: procesadorvm
+      RUNNER_USER: mariano
+      RUNNER_CMD: C:\actions-runner\run.cmd   # <- ajustá si instalaste el runner en otra ruta
+      NIRCMD_EXE: C:\nircmd.exe              # <- dejalo en esta ruta en la VM
+      RES_W: 1920
+      RES_H: 1080
+      RES_BPP: 32
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start VM (idempotente)
+        run: az vm start -g "$RG" -n "$VM" || true
+
+      - name: Esperar PowerState/running
+        run: |
+          for i in {1..120}; do
+            state=$(az vm get-instance-view -g "$RG" -n "$VM" \
+              --query "instanceView.statuses[?starts_with(code,'PowerState/')].code" -o tsv)
+            echo "Estado: $state"
+            [ "$state" = "PowerState/running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando PowerState/running"; exit 1
+
+      - name: Esperar Azure Guest Agent
+        run: |
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" \
+                 --command-id RunPowerShellScript --scripts "hostname" \
+                 --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Guest Agent OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando Guest Agent"; exit 1
+
+      # --- AUT0L0G0N SEGURO (Sysinternals si está) + fallback por registry (menos seguro) ---
+      - name: Ensure Autologon for 'mariano' (Sysinternals if present, else registry)
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --parameters `
+            "User=${{ env.RUNNER_USER }}" `
+            "Pass=${{ secrets.WIN_MARIANO_PASSWORD }}" `
+            --scripts @- <<'PS1'
+          param([string]$User,[string]$Pass)
+          $ErrorActionPreference = 'Stop'
+
+          # Evitar prompts que bloquean el logon
+          New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name DisableCAD -Value 1 -PropertyType DWord -Force | Out-Null
+          foreach($k in "LegalNoticeCaption","LegalNoticeText"){ Remove-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name $k -ErrorAction SilentlyContinue }
+
+          $exe = "C:\Tools\Autologon64.exe"
+          if (Test-Path $exe) {
+            & $exe $User "." $Pass /accepteula | Out-Null
+            Write-Host "Autologon configurado con Sysinternals."
+          } else {
+            # Fallback (NO recomendado): guarda el pass en texto claro
+            $reg="HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+            New-ItemProperty $reg -Name AutoAdminLogon    -Value "1"   -PropertyType String -Force | Out-Null
+            New-ItemProperty $reg -Name DefaultUserName   -Value $User -PropertyType String -Force | Out-Null
+            New-ItemProperty $reg -Name DefaultDomainName -Value "."   -PropertyType String -Force | Out-Null
+            New-ItemProperty $reg -Name DefaultPassword   -Value $Pass -PropertyType String -Force | Out-Null
+            New-ItemProperty $reg -Name AutoLogonCount    -Value 999   -PropertyType DWord  -Force | Out-Null
+            Write-Host "Autologon configurado por registry (fallback)."
+          }
+          PS1
+
+      # --- Runner de GitHub en sesión interactiva del usuario (arranca al logon) ---
+      - name: Ensure GitHub runner starts at user logon (interactive)
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --parameters `
+            "User=${{ env.RUNNER_USER }}" `
+            "RunnerCmd=${{ env.RUNNER_CMD }}" `
+            --scripts @- <<'PS1'
+          param([string]$User,[string]$RunnerCmd)
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path $RunnerCmd)) { throw "No existe $RunnerCmd. Instalá el runner en C:\actions-runner." }
+
+          $taskName  = 'GitHubRunnerInteractive'
+          $action    = New-ScheduledTaskAction -Execute $RunnerCmd
+          $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $User
+          $principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Highest
+
+          try { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+          Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal | Out-Null
+          Write-Host "Tarea $taskName creada (runner interactivo)."
+          PS1
+
+      - name: Reboot to trigger Autologon and interactive runner
+        run: az vm restart -g "$RG" -n "$VM"
+
+      - name: (Post-reboot) Esperar PowerState/running
+        run: |
+          for i in {1..120}; do
+            state=$(az vm get-instance-view -g "$RG" -n "$VM" \
+              --query "instanceView.statuses[?starts_with(code,'PowerState/')].code" -o tsv)
+            echo "Estado: $state"
+            [ "$state" = "PowerState/running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando PowerState/running"; exit 1
+
+      - name: (Post-reboot) Esperar Azure Guest Agent
+        run: |
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" \
+                 --command-id RunPowerShellScript --scripts "hostname" \
+                 --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Guest Agent OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando Guest Agent"; exit 1
+
+      - name: (Opcional) Esperar sesión interactiva de ${{ env.RUNNER_USER }}
+        if: ${{ inputs.wait_for_login }}
+        run: |
+          USER_SHORT="${RUNNER_USER}"
+          for i in {1..180}; do
+            out=$(az vm run-command invoke -g "$RG" -n "$VM" \
+                  --command-id RunPowerShellScript \
+                  --scripts "quser | Out-String" \
+                  --query "value[0].message" -o tsv || true)
+            echo "$out"
+            echo "$out" | grep -i -E "^[[:space:]]*${USER_SHORT}[[:space:]].*[[:space:]]Active" && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando sesión activa de ${USER_SHORT}"; exit 1
+
+      - name: (Opcional) Forzar resolución virtual (HKLM\Run) y fijar sesión (tscon)
+        if: ${{ inputs.force_display }}
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
+          $ErrorActionPreference = 'Stop'
+          $Nir = 'C:\nircmd.exe'
+          $W   = '1920'
+          $H   = '1080'
+          $Bpp = '32'
+
+          if (-not (Test-Path $Nir)) { throw "No se encontró NirCmd en '$Nir'." }
+
+          # 1) Ejecutar AHORA (como SYSTEM)
+          & $Nir setdisplay $W $H $Bpp | Out-Null
+
+          # 2) Persistir para cada logon de usuario (HKLM\Run)
+          $runKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+          $name   = 'ForceResolution'
+          $value  = "`"$Nir`" setdisplay $W $H $Bpp"
+          New-ItemProperty -Path $runKey -Name $name -Value $value -PropertyType String -Force | Out-Null
+
+          # 3) Best-effort: si hay sesión activa, mover a consola (si estaba en RDP)
+          try {
+            $q = (quser | Out-String)
+            $line = $q -split "`r?`n" | Where-Object { $_ -match "Active" } | Select-Object -First 1
+            if ($line) {
+              $id = ($line -split '\s+' | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1)
+              if ($id) { tscon $id /dest:console | Out-Null }
+            }
+          } catch {}
+
+          Write-Host "OK: Resolución ${W}x${H}x${Bpp}; persistido en HKLM:\\...\\Run como '$name'."
+          PS1
+
+      - name: (Opcional) Apagar VM al terminar
+        if: ${{ inputs.stop_after }}
+        run: az vm deallocate -g "$RG" -n "$VM"
