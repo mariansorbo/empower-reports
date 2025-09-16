@@ -24,8 +24,8 @@ env:
   SCRIPT_TO_RUN: "C:\\Users\\mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new-Copy2 (2).py"
   RUN_AS_USER: "mariano"          # nombre corto (sin .\)
   NIRCMD_EXE: "C:\\nircmd.exe"
-  RES_W: "1920"
-  RES_H: "1080"
+  RES_W: "1536"
+  RES_H: "864"
   RES_BPP: "32"
   TASK_NAME_BASE: "LanzarAppGUI"
   LOG_DIR: "C:\\Scripts\\logs"
