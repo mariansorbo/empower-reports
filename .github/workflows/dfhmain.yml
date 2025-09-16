@@ -1,8 +1,28 @@
-name: Start VM (Parsec VDD Headless)
+name: Start VM (Parsec VDD headless, ready signal)
 
 on:
   workflow_dispatch:
     inputs:
+      set_resolution:
+        description: "Forzar resolución fija (NirCmd)"
+        type: boolean
+        default: true
+      width:
+        description: "Ancho en píxeles"
+        type: number
+        default: 1536
+      height:
+        description: "Alto en píxeles"
+        type: number
+        default: 864
+      run_bot:
+        description: "Lanzar la Scheduled Task del bot"
+        type: boolean
+        default: false
+      task_name:
+        description: "Nombre de la tarea del bot"
+        type: string
+        default: "RunGUIBots"
       stop_after:
         description: "Apagar (deallocate) al terminar"
         type: boolean
@@ -19,6 +39,12 @@ jobs:
     env:
       RG: procesadorvm_group
       VM: procesadorvm
+      USERNAME: mariano
+      NIRCMD_EXE: C:\nircmd.exe
+      READY_DIR: C:\ProgramData\gui
+      READY_PS1: C:\ProgramData\gui\ready.ps1
+      READY_JSON: C:\ProgramData\gui\ready.json
+      READY_PNG:  C:\ProgramData\gui\ready.png
 
     steps:
       - name: Azure login (OIDC)
@@ -54,31 +80,116 @@ jobs:
           done
           echo "Timeout esperando Guest Agent"; exit 1
 
-      - name: Health check Parsec VDD
+      - name: Esperar sesión interactiva real (perfil + explorer de ${{ env.USERNAME }})
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<PS1
+          \$ErrorActionPreference = 'Stop'
+          \$UserName  = '${{ env.USERNAME }}'
+          \$Deadline  = (Get-Date).AddMinutes(5)
+
+          function Get-UserSid([string]\$name){
+            try { (Get-LocalUser -Name \$name).Sid.Value } catch {
+              \$sid = (wmic useraccount where "name='\$name'" get sid /value) -match 'SID=(.+)'; if(\$Matches[1]){\$Matches[1]} else { \$null }
+            }
+          }
+
+          \$sid = Get-UserSid \$UserName
+          if(-not \$sid){ throw "No se pudo resolver SID de \$UserName" }
+
+          Write-Host "Esperando perfil cargado (HKEY_USERS\\\$sid) y explorer.exe de \$UserName..."
+          do {
+            \$hiveLoaded = Test-Path "Registry::HKEY_USERS\\\$sid\\Volatile Environment"
+            \$expl = Get-Process -Name explorer -IncludeUserName -ErrorAction SilentlyContinue |
+                    Where-Object { \$_.UserName -match "\\\\\$UserName\$" }
+            if(\$hiveLoaded -and \$expl){ break }
+            Start-Sleep 3
+            if((Get-Date) -gt \$Deadline){ throw "Timeout esperando sesión interactiva de \$UserName" }
+          } while(\$true)
+
+          Write-Host "Sesión interactiva OK para \$UserName."
+          PS1
+
+      - name: (Opcional) Fijar resolución con NirCmd
+        if: ${{ inputs.set_resolution }}
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<PS1
+          \$ErrorActionPreference = 'Stop'
+          \$Nir = '${{ env.NIRCMD_EXE }}'
+          if(-not (Test-Path \$Nir)){ throw "No se encontró NirCmd en '\$Nir'." }
+          & \$Nir setdisplay ${{ inputs.width }} ${{ inputs.height }} 32 | Out-Null
+          Write-Host "Resolución aplicada: ${{ inputs.width }}x${{ inputs.height }}x32"
+          PS1
+
+      - name: Instalar/actualizar ReadySignal (toma screenshot y JSON desde ${{ env.USERNAME }})
         run: |
           az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
           $ErrorActionPreference = 'Stop'
-          # 1. Verificar sesión activa (Autologon de mariano)
-          $out = quser | Out-String
-          if ($out -notmatch "Active") {
-            Write-Error "No se detecta sesión activa"
-          }
+          $readyDir  = "$env:READY_DIR"
+          $readyPs1  = "$env:READY_PS1"
+          New-Item -ItemType Directory -Force -Path $readyDir | Out-Null
 
-          # 2. Verificar resolución actual
+          @"
+          param([string]\$JsonPath = "${env:READY_JSON}", [string]\$PngPath = "${env:READY_PNG}")
+          \$ErrorActionPreference = 'Stop'
           Add-Type -AssemblyName System.Windows.Forms
-          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          Write-Host "Resolución actual: $($bounds.Width)x$($bounds.Height)"
-
-          # 3. Screenshot de prueba
           Add-Type -AssemblyName System.Drawing
-          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-          $path = "$env:TEMP\headless-check.png"
-          $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-          $g.Dispose(); $bmp.Dispose()
-          Write-Host "Screenshot de health check en $path"
+          \$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          \$bmp = New-Object System.Drawing.Bitmap \$b.Width, \$b.Height
+          \$g = [System.Drawing.Graphics]::FromImage(\$bmp)
+          \$g.CopyFromScreen(\$b.Location, [System.Drawing.Point]::Empty, \$b.Size)
+          \$bmp.Save(\$PngPath, [System.Drawing.Imaging.ImageFormat]::Png)
+          \$g.Dispose(); \$bmp.Dispose()
+          \$obj = [ordered]@{
+            time = (Get-Date).ToString("s")
+            width  = \$b.Width
+            height = \$b.Height
+            user   = [Environment]::UserName
+            png    = \$PngPath
+          }
+          \$obj | ConvertTo-Json | Set-Content -Path \$JsonPath -Encoding UTF8
+          "@ | Set-Content -Path $readyPs1 -Encoding UTF8
+
+          # Registrar tarea 'GUIReadySignal' que corre en el LOGON de $env:USERNAME
+          $taskName = "GUIReadySignal"
+          $action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$readyPs1`""
+          $trigger  = New-ScheduledTaskTrigger -AtLogOn -User "$env:COMPUTERNAME\$env:USERNAME"
+          $principal= New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\$env:USERNAME" -RunLevel Limited
+          try {
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+          } catch {
+            # En algunos builds, -User requiere dominio explícito; como fallback, crear sin -User en trigger
+            $trigger  = New-ScheduledTaskTrigger -AtLogOn
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+          }
+          Write-Host "ReadySignal PS1 y Scheduled Task actualizados."
           PS1
+
+      - name: Ejecutar ReadySignal ahora (on-demand) y esperar JSON fresco
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<PS1
+          \$ErrorActionPreference = 'Stop'
+          schtasks /run /tn "GUIReadySignal" | Out-Null
+
+          \$deadline = (Get-Date).AddMinutes(2)
+          do {
+            if(Test-Path "${{ env.READY_JSON }}"){
+              try {
+                \$j = Get-Content "${{ env.READY_JSON }}" | ConvertFrom-Json
+                if(\$j.width -and \$j.height -and \$j.user){
+                  Write-Host "READY: \$((Get-Item '${{ env.READY_JSON }}').LastWriteTime) | \$('\{0}x{1}' -f \$j.width,\$j.height) | user=\$($j.user)"
+                  break
+                }
+              } catch {}
+            }
+            Start-Sleep 2
+            if((Get-Date) -gt \$deadline){ throw "Timeout esperando READY_JSON" }
+          } while(\$true)
+          PS1
+
+      - name: (Opcional) Lanzar Scheduled Task del bot
+        if: ${{ inputs.run_bot }}
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts "schtasks /run /tn '${{ inputs.task_name }}'"
 
       - name: (Opcional) Apagar VM
         if: ${{ inputs.stop_after }}
