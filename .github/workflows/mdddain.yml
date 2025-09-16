@@ -1,4 +1,4 @@
-name: Start VM (Parsec VDD headless, ready signal) 2
+name: Start VM (Parsec VDD headless, ready signal)
 
 on:
   workflow_dispatch:
@@ -54,17 +54,32 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Start VM (idempotente)
-        run: az vm start -g "$RG" -n "$VM" || true
-
-      - name: Esperar VM en running (fix)
+      # Arranque realmente idempotente: mira estado y actúa según corresponda
+      - name: Start/Ensure VM running (idempotente + debug)
         run: |
-          for i in {1..60}; do
+          set -euo pipefail
+          state=$(az vm show -g "$RG" -n "$VM" --query "powerState" -o tsv || true)
+          echo "Estado inicial: ${state:-<sin respuesta>}"
+          case "$state" in
+            "VM running")
+              echo "La VM ya está en running. No hago start."
+              ;;
+            "VM stopped"|"VM deallocated"|"VM deallocating"|"VM stopping"|"")
+              echo "VM no está en running. Hago az vm start..."
+              az vm start -g "$RG" -n "$VM"
+              ;;
+            *)
+              echo "Estado desconocido o transitorio: '$state'. Intento start por las dudas..."
+              az vm start -g "$RG" -n "$VM" || true
+              ;;
+          esac
+
+      - name: Esperar VM en running (fix robusto)
+        run: |
+          for i in {1..90}; do
             state=$(az vm show -g "$RG" -n "$VM" --query "powerState" -o tsv || true)
             echo "Estado: ${state:-<sin respuesta>}"
-            if [ "$state" = "VM running" ]; then
-              exit 0
-            fi
+            [ "$state" = "VM running" ] && exit 0
             sleep 5
           done
           echo "Timeout esperando VM running"; exit 1
