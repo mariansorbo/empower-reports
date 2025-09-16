@@ -1,0 +1,85 @@
+name: Start VM (Parsec VDD Headless)
+
+on:
+  workflow_dispatch:
+    inputs:
+      stop_after:
+        description: "Apagar (deallocate) al terminar"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start-vm:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RG: procesadorvm_group
+      VM: procesadorvm
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start VM (idempotente)
+        run: az vm start -g "$RG" -n "$VM" || true
+
+      - name: Esperar PowerState/running
+        run: |
+          for i in {1..120}; do
+            state=$(az vm get-instance-view -g "$RG" -n "$VM" \
+              --query "instanceView.statuses[?starts_with(code,'PowerState/')].code" -o tsv)
+            echo "Estado: $state"
+            [ "$state" = "PowerState/running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando PowerState/running"; exit 1
+
+      - name: Esperar Azure Guest Agent
+        run: |
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" \
+                 --command-id RunPowerShellScript --scripts "hostname" \
+                 --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Guest Agent OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando Guest Agent"; exit 1
+
+      - name: Health check Parsec VDD
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
+          $ErrorActionPreference = 'Stop'
+          # 1. Verificar sesión activa (Autologon de mariano)
+          $out = quser | Out-String
+          if ($out -notmatch "Active") {
+            Write-Error "No se detecta sesión activa"
+          }
+
+          # 2. Verificar resolución actual
+          Add-Type -AssemblyName System.Windows.Forms
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          Write-Host "Resolución actual: $($bounds.Width)x$($bounds.Height)"
+
+          # 3. Screenshot de prueba
+          Add-Type -AssemblyName System.Drawing
+          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $path = "$env:TEMP\headless-check.png"
+          $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+          $g.Dispose(); $bmp.Dispose()
+          Write-Host "Screenshot de health check en $path"
+          PS1
+
+      - name: (Opcional) Apagar VM
+        if: ${{ inputs.stop_after }}
+        run: az vm deallocate -g "$RG" -n "$VM"
