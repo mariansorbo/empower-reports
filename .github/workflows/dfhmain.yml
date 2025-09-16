@@ -91,21 +91,21 @@ jobs:
           $prof = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*' `
                   | Where-Object { $_.ProfileImagePath -match "\\$UserName$" } `
                   | Select-Object -First 1
-          if (-not $prof) { throw "No encontré ProfileList para $UserName" }
+          if (-not $prof) { throw ("No encontré ProfileList para {0}" -f $UserName) }
           $sid = Split-Path $prof.PSChildName -Leaf
-          Write-Host "SID de $UserName: $sid"
+          Write-Host ("SID de {0}: {1}" -f $UserName, $sid)
 
           # 2) Esperar a que el hive del perfil esté cargado (usuario realmente logueado)
-          Write-Host "Esperando HKU:\$sid\Volatile Environment..."
+          Write-Host ("Esperando HKU:\{0}\Volatile Environment..." -f $sid)
           do {
-            $hiveLoaded = Test-Path "Registry::HKEY_USERS\$sid\Volatile Environment"
+            $hiveLoaded = Test-Path ("Registry::HKEY_USERS\{0}\Volatile Environment" -f $sid)
             if ($hiveLoaded) { break }
             Start-Sleep 2
-            if ((Get-Date) -gt $deadline) { throw "Timeout esperando carga de perfil (HKU:\$sid)" }
+            if ((Get-Date) -gt $deadline) { throw ("Timeout esperando carga de perfil (HKU:\{0})" -f $sid) }
           } while ($true)
 
           # 3) Esperar explorer.exe propiedad de $UserName (escritorio interactivo)
-          Write-Host "Esperando explorer.exe de $UserName..."
+          Write-Host ("Esperando explorer.exe de {0}..." -f $UserName)
           do {
             $owned = $false
             $procs = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue
@@ -115,7 +115,7 @@ jobs:
             }
             if ($owned) { break }
             Start-Sleep 2
-            if ((Get-Date) -gt $deadline) { throw "Timeout esperando explorer.exe de $UserName" }
+            if ((Get-Date) -gt $deadline) { throw ("Timeout esperando explorer.exe de {0}" -f $UserName) }
           } while ($true)
 
           try {
@@ -124,7 +124,7 @@ jobs:
             Write-Host ("Sesión OK. Resolución actual: {0}x{1}" -f $b.Width,$b.Height)
           } catch { Write-Host "Sesión OK (no pude leer resolución, no es crítico)." }
 
-          Write-Host "Listo: sesión interactiva de $UserName confirmada."
+          Write-Host ("Listo: sesión interactiva de {0} confirmada." -f $UserName)
           PS1
 
       - name: (Opcional) Fijar resolución con NirCmd
