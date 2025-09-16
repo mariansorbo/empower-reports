@@ -1,4 +1,4 @@
-name: Start VM (Parsec VDD headless, ready signal)
+name: Start VM (Parsec VDD headless, ready signal) 2
 
 on:
   workflow_dispatch:
