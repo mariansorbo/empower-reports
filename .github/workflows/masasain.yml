@@ -1,0 +1,89 @@
+name: Run GUI Automation Script
+
+on:
+  workflow_dispatch:
+    inputs:
+      stop_after:
+        description: "Apagar (deallocate) la VM al terminar para ahorrar costos"
+        type: boolean
+        default: true
+      script_path:
+        description: "Ruta completa al script de Python dentro de la VM"
+        type: string
+        required: true
+        default: 'C:\Users\Mariano\Scripts\run_one.py'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  run-automation:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RG: procesadorvm_group
+      VM: procesadorvm
+      # El nombre de usuario de tu VM. Es crucial que coincida con el usuario de autologon.
+      USER_PRINCIPAL: mariano
+
+    steps:
+      - name: 1. Login en Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: 2. Iniciar VM
+        run: az vm start -g "$RG" -n "$VM" || true
+
+      - name: 3. Esperar que la VM esté en estado 'running'
+        run: |
+          echo "Esperando que la VM se inicie..."
+          for i in {1..120}; do
+            state=$(az vm get-instance-view -g "$RG" -n "$VM" --query "instanceView.statuses[?starts_with(code,'PowerState/')].code" -o tsv)
+            echo "Estado: $state"
+            [ "$state" = "PowerState/running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando PowerState/running"; exit 1
+
+      - name: 4. Esperar a que el Agente de Azure esté listo
+        run: |
+          echo "Esperando que el Agente de Azure esté listo..."
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts "hostname" --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Agente OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando el Agente"; exit 1
+
+      - name: 5. Esperar a que la sesión de ${{ env.USER_PRINCIPAL }} esté activa
+        run: |
+          echo "Esperando que el usuario ${{ env.USER_PRINCIPAL }} inicie sesión..."
+          for i in {1..180}; do
+            out=$(az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts "quser" --query "value[0].message" -o tsv || true)
+            echo "$out"
+            echo "$out" | grep -i -E "^[[:space:]]*${{ env.USER_PRINCIPAL }}[[:space:]].*[[:space:]]Active" && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando la sesión activa de ${{ env.USER_PRINCIPAL }}"; exit 1
+
+      - name: 6. Lanzar el script GUI
+        run: |
+          echo "Lanzando el script GUI..."
+          # El comando se ejecuta directamente en la VM
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
+            $script_path = "${{ inputs.script_path }}"
+            if (-not (Test-Path $script_path)) {
+              throw "No se encontró el script en: $script_path"
+            }
+            Write-Host "Ejecutando script: $script_path"
+            Start-Process -FilePath 'C:\Program Files\Python312\python.exe' -ArgumentList ('"' + $script_path + '"')
+          PS1
+
+      - name: 7. Apagar VM (si se solicitó)
+        if: ${{ inputs.stop_after }}
+        run: az vm deallocate -g "$RG" -n "$VM"
