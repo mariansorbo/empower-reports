@@ -1,0 +1,60 @@
+name: Azure VM GUI Automation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  automate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}  # JSON with subscriptionId, clientId, clientSecret, tenantId
+
+      - name: Start VM
+        run: |
+          az vm start --name windows-vm --resource-group automation-rg
+
+      - name: Wait for VM Boot and Logon
+        run: sleep 60
+
+      - name: Trigger Automation Task
+        run: |
+          az vm run-command invoke --name windows-vm --resource-group automation-rg --command-id RunCustomScript --scripts "schtasks /run /tn RunAutomation"
+
+      - name: Wait and Poll for Completion
+        run: |
+          attempt=0
+          max_attempts=30  # 5 min at 10s intervals
+          while [ $attempt -lt $max_attempts ]; do
+            if az storage blob exists --account-name automstorage --container-name artifacts --name done.txt --auth-mode login --query exists; then
+              echo "Done file found."
+              break
+            fi
+            echo "Waiting for done.txt... Attempt $attempt"
+            sleep 10
+            attempt=$((attempt+1))
+          done
+          if [ $attempt -eq $max_attempts ]; then
+            echo "Timeout: Automation did not complete."
+            exit 1
+          fi
+
+      - name: Download Artifacts from Blob
+        run: |
+          az storage blob download-batch --destination ./artifacts --source artifacts --account-name automstorage --auth-mode login --no-progress
+
+      - name: Upload Artifacts to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-evidence
+          path: ./artifacts/
+
+      - name: Stop VM
+        run: |
+          az vm deallocate --name windows-vm --resource-group automation-rg
+        if: always()  # Run even on failure
