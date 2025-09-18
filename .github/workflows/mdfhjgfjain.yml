@@ -1,63 +1,30 @@
-name: Verificar Autologon y Captura de Pantalla
+name: Simple GitHub Runner Workflow
 
 on:
-  workflow_dispatch:
-    inputs:
-      wait_for_login:
-        description: "Esperar sesión interactiva de 'mariano' (autologon)"
-        type: boolean
-        default: true
-      take_screenshot:
-        description: "Tomar un screenshot de la pantalla"
-        type: boolean
-        default: true
-
-env:
-  RUN_AS_USER: "mariano"          # Nombre corto (sin .\)
-  NIRCMD_EXE: "C:\\nircmd.exe"    # Ruta de NirCmd
-  SCREENSHOT_PATH: "C:\\path\\to\\screenshot.png"  # Ruta donde se guardará el screenshot
-  LOG_DIR: "C:\\Scripts\\logs"     # Directorio para logs
+  push:
+    branches:
+      - main  # Puedes especificar la rama que prefieras (por ejemplo, "main" o "master")
 
 jobs:
-  verify_display:
-    runs-on: [self-hosted, windows, gui]
-    defaults:
-      run:
-        shell: powershell
+  run_script:
+    runs-on: [self-hosted, windows]  # Usa tu runner auto-hospedado en Windows
 
     steps:
-      # Verificar que la sesión interactiva del usuario está activa
-      - name: Verificar/esperar sesión interactiva de $env:RUN_AS_USER
-        if: ${{ inputs.wait_for_login }}
+      # Paso 1: Verifica que el runner esté en línea y disponible
+      - name: Verificar el estado del runner
         run: |
-          $u = "${env:RUN_AS_USER}"
-          $deadline = (Get-Date).AddMinutes(5)
-          do {
-            $q = (quser | Out-String)
-            if ($q -match "(?im)^[\s>]*$([regex]::Escape($u))\b.*\sActive\b") { 
-              Write-Host "OK: sesión de $u activa"; exit 0 
-            }
-            Start-Sleep 2
-          } while ((Get-Date) -lt $deadline)
-          Write-Host "=== quser ===`n$q"
-          throw "No hay sesión interactiva de '$u'. Corré primero el workflow 1 para que el autologon la cree."
+          echo "Verificando que el runner esté listo"
+          echo "Estado del runner: ${{ runner.name }}"
 
-      # Verificar salida de display y tomar un screenshot con NirCmd
-      - name: Forzar resolución con NirCmd (y tomar screenshot)
-        if: ${{ inputs.take_screenshot }}
+      # Paso 2: Ejecuta un script de PowerShell (o cualquier otro script que tengas)
+      - name: Ejecutar script PowerShell
         run: |
-          if (-not (Test-Path "${env:NIRCMD_EXE}")) { throw "No existe ${env:NIRCMD_EXE}" }
-          # Forzar resolución (opcional, puedes omitir si no lo necesitas)
-          & "${env:NIRCMD_EXE}" setdisplay 1920 1080 32 2>$null
-          Write-Host "Resolución forzada a 1920x1080x32"
-          
-          # Tomar el screenshot
-          & "${env:NIRCMD_EXE}" savescreenshot "${env:SCREENSHOT_PATH}"
-          Write-Host "Screenshot guardado en ${env:SCREENSHOT_PATH}"
-      
-      # (Opcional) Mostrar las últimas líneas del log
-      - name: Mostrar log
+          # Aquí puedes poner cualquier comando que quieras ejecutar en tu máquina
+          # Por ejemplo, para ejecutar un script PowerShell que ya tienes en tu runner
+          Write-Host "Ejecutando script en el self-hosted runner"
+          powershell -Command "C:\actions-runner\run.cmd"  # O cualquier otro script que desees ejecutar
+
+      # Paso 3: Realizar cualquier otra acción, como enviar notificaciones, analizar logs, etc.
+      - name: Enviar notificación o analizar logs
         run: |
-          $logFile = "${env:LOG_DIR}\\log.txt"
-          Write-Host "=== Últimas líneas del log ==="
-          Get-Content -LiteralPath $logFile -Tail 20
+          echo "El script se ejecutó correctamente."
