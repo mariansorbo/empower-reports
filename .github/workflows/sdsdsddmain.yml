@@ -1,0 +1,42 @@
+name: Simple GitHub Runner Workflow v2
+
+on:
+  push:
+    branches:
+      - main  # You can modify this to any branch you want to trigger on, e.g., "develop"
+
+jobs:
+  run_on_self_hosted_runner:
+    runs-on: [self-hosted, windows]  # This will use your self-hosted runner on Windows
+    
+    env:
+      RUN_AS_USER: ".\\mariano"      # Full name for the interactive user
+      RUN_AS_SHORT: "mariano"        # Short name for the user
+
+    steps:
+      # Step 1: Check if GitHub Runner is connected
+      - name: Check if GitHub Runner is connected
+        run: |
+          echo "Verifying that the GitHub Runner is ready and connected..."
+          echo "Runner status: ${{ runner.name }}"
+
+      # Step 2: Use `RUN_AS_USER` and `RUN_AS_SHORT` variables in PowerShell
+      - name: Run PowerShell Script with User Information
+        run: |
+          echo "Running script with user information..."
+          echo "RUN_AS_USER: $RUN_AS_USER"
+          echo "RUN_AS_SHORT: $RUN_AS_SHORT"
+
+          # Here you can use the variables for tasks like quser or anything related to the user
+          powershell -Command "
+            $user = '$env:RUN_AS_USER'
+            $shortUser = '$env:RUN_AS_SHORT'
+            Write-Host 'Full user name: ' $user
+            Write-Host 'Short user name: ' $shortUser
+            quser $shortUser
+          "
+
+      # Step 3: Optional step for additional tasks like notifications or logging
+      - name: Perform additional tasks (Optional)
+        run: |
+          echo "This step is optional. You can run additional commands here."
