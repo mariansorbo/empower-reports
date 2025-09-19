@@ -1,0 +1,22 @@
+name: Test Runner Workflow
+
+on:
+  push:
+    branches:
+      - main  # O la rama en la que quieras que se ejecute el workflow
+
+jobs:
+  test:
+    runs-on: self-hosted  # Este trabajo se ejecutará en el runner auto-hospedado
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Run a one-line script
+        run: echo "Hello, GitHub Runner is working!"
+        
+      - name: Verify runner is listening
+        run: |
+          echo "Checking runner..."
+          echo "Runner is listening for jobs on $(date)"
