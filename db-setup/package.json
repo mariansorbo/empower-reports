@@ -1,0 +1,17 @@
+{
+  "name": "empower-reports-db-setup",
+  "version": "1.0.0",
+  "description": "Setup scripts para Azure SQL Database",
+  "type": "module",
+  "scripts": {
+    "test-connection": "node test-connection.js",
+    "create-schema": "node create-schema.js",
+    "run-migrations": "node run-migrations.js"
+  },
+  "dependencies": {
+    "mssql": "^10.0.2",
+    "dotenv": "^16.3.1",
+    "@azure/identity": "^4.0.0"
+  }
+}
+
