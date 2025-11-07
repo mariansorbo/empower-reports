@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: empower-reports-db
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+      - MSSQL_PID=Developer
+    volumes:
+      # Persistir datos de la base de datos
+      - sqlserver_data:/var/opt/mssql
+      # Logs
+      - sqlserver_logs:/var/opt/mssql/log
+    restart: unless-stopped
+    networks:
+      - empower-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourStrong!Passw0rd -Q 'SELECT 1' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  sqlserver_data:
+    driver: local
+  sqlserver_logs:
+    driver: local
+
+networks:
+  empower-network:
+    driver: bridge
+
