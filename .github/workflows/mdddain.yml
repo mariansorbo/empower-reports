@@ -1,0 +1,231 @@
+name: Start VM (Parsec VDD headless, ready signal) 2
+
+on:
+  workflow_dispatch:
+    inputs:
+      set_resolution:
+        description: "Forzar resolución fija (NirCmd)"
+        type: boolean
+        default: true
+      width:
+        description: "Ancho en píxeles"
+        type: number
+        default: 1536
+      height:
+        description: "Alto en píxeles"
+        type: number
+        default: 864
+      run_bot:
+        description: "Lanzar la Scheduled Task del bot"
+        type: boolean
+        default: false
+      task_name:
+        description: "Nombre de la tarea del bot"
+        type: string
+        default: "RunGUIBots"
+      stop_after:
+        description: "Apagar (deallocate) al terminar"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start-vm:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RG: procesadorvm_group
+      VM: procesadorvm
+      USERNAME: mariano
+      NIRCMD_EXE: C:\nircmd.exe
+      READY_DIR: C:\ProgramData\gui
+      READY_PS1: C:\ProgramData\gui\ready.ps1
+      READY_JSON: C:\ProgramData\gui\ready.json
+      READY_PNG:  C:\ProgramData\gui\ready.png
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Arranque realmente idempotente: mira estado y actúa según corresponda
+      - name: Start/Ensure VM running (idempotente + debug)
+        run: |
+          set -euo pipefail
+          state=$(az vm show -g "$RG" -n "$VM" --query "powerState" -o tsv || true)
+          echo "Estado inicial: ${state:-<sin respuesta>}"
+          case "$state" in
+            "VM running")
+              echo "La VM ya está en running. No hago start."
+              ;;
+            "VM stopped"|"VM deallocated"|"VM deallocating"|"VM stopping"|"")
+              echo "VM no está en running. Hago az vm start..."
+              az vm start -g "$RG" -n "$VM"
+              ;;
+            *)
+              echo "Estado desconocido o transitorio: '$state'. Intento start por las dudas..."
+              az vm start -g "$RG" -n "$VM" || true
+              ;;
+          esac
+
+      - name: Esperar VM en running (fix robusto)
+        run: |
+          for i in {1..90}; do
+            state=$(az vm show -g "$RG" -n "$VM" --query "powerState" -o tsv || true)
+            echo "Estado: ${state:-<sin respuesta>}"
+            [ "$state" = "VM running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando VM running"; exit 1
+
+      - name: Esperar Azure Guest Agent
+        run: |
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" \
+                 --command-id RunPowerShellScript --scripts "hostname" \
+                 --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Guest Agent OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando Guest Agent"; exit 1
+
+      - name: Esperar sesión interactiva real (perfil + explorer de ${{ env.USERNAME }})
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
+          $ErrorActionPreference = 'Stop'
+          $UserName = '${{ env.USERNAME }}'
+          $deadline = (Get-Date).AddMinutes(7)
+
+          # 1) Resolver SID del usuario desde ProfileList (fiable desde SYSTEM)
+          $prof = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*' `
+                  | Where-Object { $_.ProfileImagePath -match "\\$UserName$" } `
+                  | Select-Object -First 1
+          if (-not $prof) { throw ("No encontré ProfileList para {0}" -f $UserName) }
+          $sid = Split-Path $prof.PSChildName -Leaf
+          Write-Host ("SID de {0}: {1}" -f $UserName, $sid)
+
+          # 2) Esperar a que el hive del perfil esté cargado (usuario realmente logueado)
+          Write-Host ("Esperando HKU:\{0}\Volatile Environment..." -f $sid)
+          do {
+            $hiveLoaded = Test-Path ("Registry::HKEY_USERS\{0}\Volatile Environment" -f $sid)
+            if ($hiveLoaded) { break }
+            Start-Sleep 2
+            if ((Get-Date) -gt $deadline) { throw ("Timeout esperando carga de perfil (HKU:\{0})" -f $sid) }
+          } while ($true)
+
+          # 3) Esperar explorer.exe propiedad de $UserName (escritorio interactivo)
+          Write-Host ("Esperando explorer.exe de {0}..." -f $UserName)
+          do {
+            $owned = $false
+            $procs = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue
+            foreach ($p in $procs) {
+              $owner = Invoke-CimMethod -InputObject $p -MethodName GetOwner -ErrorAction SilentlyContinue
+              if ($owner.User -ieq $UserName) { $owned = $true; break }
+            }
+            if ($owned) { break }
+            Start-Sleep 2
+            if ((Get-Date) -gt $deadline) { throw ("Timeout esperando explorer.exe de {0}" -f $UserName) }
+          } while ($true)
+
+          try {
+            Add-Type -AssemblyName System.Windows.Forms
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            Write-Host ("Sesión OK. Resolución actual: {0}x{1}" -f $b.Width,$b.Height)
+          } catch { Write-Host "Sesión OK (no pude leer resolución, no es crítico)." }
+
+          Write-Host ("Listo: sesión interactiva de {0} confirmada." -f $UserName)
+          PS1
+
+      - name: (Opcional) Fijar resolución con NirCmd
+        if: ${{ inputs.set_resolution }}
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<PS1
+          $ErrorActionPreference = 'Stop'
+          $Nir = '${{ env.NIRCMD_EXE }}'
+          if(-not (Test-Path $Nir)){ throw "No se encontró NirCmd en '$Nir'." }
+          & $Nir setdisplay ${{ inputs.width }} ${{ inputs.height }} 32 | Out-Null
+          Write-Host "Resolución aplicada: ${{ inputs.width }}x${{ inputs.height }}x32"
+          PS1
+
+      - name: Instalar/actualizar ReadySignal (toma screenshot y JSON desde ${{ env.USERNAME }})
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<PS1
+          $ErrorActionPreference = 'Stop'
+          $readyDir = "${{ env.READY_DIR }}"
+          $readyPs1 = "${{ env.READY_PS1 }}"
+          New-Item -ItemType Directory -Force -Path $readyDir | Out-Null
+
+          @"
+          param([string]\$JsonPath = "${{ env.READY_JSON }}", [string]\$PngPath = "${{ env.READY_PNG }}")
+          \$ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          \$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          \$bmp = New-Object System.Drawing.Bitmap \$b.Width, \$b.Height
+          \$g = [System.Drawing.Graphics]::FromImage(\$bmp)
+          \$g.CopyFromScreen(\$b.Location, [System.Drawing.Point]::Empty, \$b.Size)
+          \$bmp.Save(\$PngPath, [System.Drawing.Imaging.ImageFormat]::Png)
+          \$g.Dispose(); \$bmp.Dispose()
+          \$obj = [ordered]@{
+            time   = (Get-Date).ToString("s")
+            width  = \$b.Width
+            height = \$b.Height
+            user   = [Environment]::UserName
+            png    = \$PngPath
+          }
+          \$obj | ConvertTo-Json | Set-Content -Path \$JsonPath -Encoding UTF8
+          "@ | Set-Content -Path $readyPs1 -Encoding UTF8
+
+          # Registrar tarea 'GUIReadySignal' que corre AL LOGON de ${{ env.USERNAME }}
+          $taskName = "GUIReadySignal"
+          $action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$readyPs1`""
+          $trigger  = New-ScheduledTaskTrigger -AtLogOn -User "$env:COMPUTERNAME\${{ env.USERNAME }}"
+          $principal= New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\${{ env.USERNAME }}" -RunLevel Limited
+          try {
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+          } catch {
+            # Fallback si -User en el trigger falla en algún build
+            $trigger  = New-ScheduledTaskTrigger -AtLogOn
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+          }
+          Write-Host "ReadySignal PS1 y Scheduled Task actualizados."
+          PS1
+
+      - name: Ejecutar ReadySignal ahora (on-demand) y esperar JSON fresco
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
+          $ErrorActionPreference = 'Stop'
+          schtasks /run /tn "GUIReadySignal" | Out-Null
+
+          $jsonPath  = '${{ env.READY_JSON }}'
+          $deadline  = (Get-Date).AddMinutes(2)
+          do {
+            if(Test-Path $jsonPath){
+              try {
+                $j = Get-Content $jsonPath | ConvertFrom-Json
+                if($j.width -and $j.height -and $j.user){
+                  Write-Host ("READY: {0} | {1}x{2} | user={3}" -f (Get-Item $jsonPath).LastWriteTime,$j.width,$j.height,$j.user)
+                  break
+                }
+              } catch {}
+            }
+            Start-Sleep 2
+            if((Get-Date) -gt $deadline){ throw "Timeout esperando READY_JSON" }
+          } while($true)
+          PS1
+
+      - name: (Opcional) Lanzar Scheduled Task del bot
+        if: ${{ inputs.run_bot }}
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts "schtasks /run /tn '${{ inputs.task_name }}'"
+
+      - name: (Opcional) Apagar VM
+        if: ${{ inputs.stop_after }}
+        run: az vm deallocate -g "$RG" -n "$VM"

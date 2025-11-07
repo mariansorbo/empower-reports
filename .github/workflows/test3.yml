@@ -1,0 +1,21 @@
+name: Run Test2.py on VM (bloqueante)
+on: { workflow_dispatch: {} }
+
+jobs:
+  run:
+    runs-on: [self-hosted, windows, gui]
+    steps:
+      - name: Ver Python
+        shell: cmd
+        run: python --version
+
+      - name: Instalar pyautogui
+        shell: cmd
+        run: pip install pyautogui
+
+      - name: Ejecutar Test2.py y esperar a que termine
+        shell: powershell
+        run: |
+          $script = "C:\Users\Mariano\Documents\DMV Automation - 10 Jun V2\Test2.py"
+          $p = Start-Process -FilePath "python" -ArgumentList @("`"$script`"") -PassThru -WindowStyle Normal
+          Wait-Process -Id $p.Id

@@ -1,0 +1,121 @@
+name: Start VM (force display) 2
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_for_login:
+        description: "Esperar sesión interactiva de 'mariano' (Autologon)"
+        type: boolean
+        default: true
+      force_display:
+        description: "Forzar resolución virtual (NirCmd) y fijar sesión con tscon"
+        type: boolean
+        default: true
+      stop_after:
+        description: "Apagar (deallocate) al terminar"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start-and-force-display:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RG: procesadorvm_group
+      VM: procesadorvm
+      USER_PRINCIPAL: .\mariano
+      NIRCMD_EXE: C:\nircmd.exe
+      RES_W: 1920
+      RES_H: 1080
+      RES_BPP: 32
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start VM (idempotente)
+        run: az vm start -g "$RG" -n "$VM" || true
+
+      - name: Esperar PowerState/running
+        run: |
+          for i in {1..120}; do
+            state=$(az vm get-instance-view -g "$RG" -n "$VM" \
+              --query "instanceView.statuses[?starts_with(code,'PowerState/')].code" -o tsv)
+            echo "Estado: $state"
+            [ "$state" = "PowerState/running" ] && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando PowerState/running"; exit 1
+
+      - name: Esperar Azure Guest Agent
+        run: |
+          for i in {1..60}; do
+            if az vm run-command invoke -g "$RG" -n "$VM" \
+                 --command-id RunPowerShellScript --scripts "hostname" \
+                 --query "value[0].message" -o tsv >/dev/null 2>&1; then
+              echo "Guest Agent OK"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout esperando Guest Agent"; exit 1
+
+      - name: (Opcional) Esperar sesión interactiva de ${{ env.USER_PRINCIPAL }}
+        if: ${{ inputs.wait_for_login }}
+        run: |
+          USER_SHORT=$(echo "$USER_PRINCIPAL" | awk -F'\\' '{print $NF}')
+          for i in {1..180}; do
+            out=$(az vm run-command invoke -g "$RG" -n "$VM" \
+                  --command-id RunPowerShellScript \
+                  --scripts "quser | Out-String" \
+                  --query "value[0].message" -o tsv || true)
+            echo "$out"
+            echo "$out" | grep -i -E "^[[:space:]]*${USER_SHORT}[[:space:]].*[[:space:]]Active" && exit 0
+            sleep 5
+          done
+          echo "Timeout esperando sesión activa de ${USER_SHORT}"; exit 1
+
+      - name: (Opcional) Forzar resolución virtual (HKLM\\Run) y fijar sesión (tscon)
+        if: ${{ inputs.force_display }}
+        run: |
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunPowerShellScript --scripts @- <<'PS1'
+          $ErrorActionPreference = 'Stop'
+          $Nir = if ([string]::IsNullOrWhiteSpace($env:NIRCMD_EXE)) { 'C:\nircmd.exe' } else { $env:NIRCMD_EXE }
+          $W   = if ([string]::IsNullOrWhiteSpace($env:RES_W)) { '1920' } else { $env:RES_W }
+          $H   = if ([string]::IsNullOrWhiteSpace($env:RES_H)) { '1080' } else { $env:RES_H }
+          $Bpp = if ([string]::IsNullOrWhiteSpace($env:RES_BPP)) { '32' } else { $env:RES_BPP }
+
+          if (-not (Test-Path $Nir)) { throw "No se encontró NirCmd en '$Nir'." }
+
+          # 1) Ejecutar AHORA MISMO (como SYSTEM; cambia la resolución a nivel sistema)
+          & $Nir setdisplay $W $H $Bpp | Out-Null
+
+          # 2) Persistir para cada logon de usuario (sin pelear con SIDs): HKLM\...\Run
+          $runKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+          $name   = 'ForceResolution'
+          $value  = "`"$Nir`" setdisplay $W $H $Bpp"
+          New-ItemProperty -Path $runKey -Name $name -Value $value -PropertyType String -Force | Out-Null
+
+          # 3) Best-effort: si hay sesión activa, intentar tscon a consola (no rompe si falla)
+          try {
+            $q = (quser | Out-String)
+            $line = $q -split "`r?`n" | Where-Object { $_ -match "Active" } | Select-Object -First 1
+            if ($line) {
+              $id = ($line -split '\s+' | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1)
+              if ($id) { tscon $id /dest:console | Out-Null }
+            }
+          } catch {}
+
+          Write-Host "OK: Resolución ${W}x${H}x${Bpp}; persistido en HKLM:\\...\\Run como '$name'."
+          PS1
+
+      - name: (Opcional) Apagar VM
+        if: ${{ inputs.stop_after }}
+        run: az vm deallocate -g "$RG" -n "$VM"

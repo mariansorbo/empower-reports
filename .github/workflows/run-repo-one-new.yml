@@ -1,0 +1,89 @@
+name: Run One_new.py (forzado y con trazas)
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: powershell  # Windows PowerShell 5.1
+
+jobs:
+  run-on-vm:
+    runs-on: [self-hosted, windows, gui]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo (con LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Elegir python.exe (no py.exe) y mostrar versión/rutas
+        id: pickpy
+        run: |
+          $candidatos = @(
+            "C:\Python312\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Program Files\Python312\python.exe",
+            "C:\Program Files\Python311\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+          )
+          $python = $null
+          foreach ($c in $candidatos) { if (Test-Path $c) { $python = $c; break } }
+          if (-not $python) {
+            $gcmd = Get-Command python.exe -ErrorAction SilentlyContinue
+            if ($gcmd) { $python = $gcmd.Source }
+          }
+          if (-not $python) { Write-Error "No se encontró python.exe"; exit 1 }
+
+          Write-Host "USING PYTHON: $python"
+          & $python -V
+          "PYTHON_PATH=$python" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          Write-Host "where python:"
+          where.exe python | ForEach-Object { Write-Host $_ }
+          Write-Host "where py:"
+          where.exe py | ForEach-Object { Write-Host $_ }
+
+      - name: (Opcional) Instalar requirements.txt si existe
+        run: |
+          $req = Join-Path $env:GITHUB_WORKSPACE 'requirements.txt'
+          if (Test-Path $req) {
+            & $env:PYTHON_PATH -m pip install -r $req
+          } else {
+            Write-Host "No hay requirements.txt"
+          }
+
+      - name: Ejecutar One_new.py (bloqueante, muestra traceback y guarda log)
+        run: |
+          $logDir = "C:\Temp\RunnerLogs"
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+          $rel    = "DMV Automation - 10 Jun V2/One_new.py"
+          $script = Join-Path $env:GITHUB_WORKSPACE $rel
+
+          Write-Host "WORKSPACE: $env:GITHUB_WORKSPACE"
+          Write-Host "SCRIPT ABS: $script"
+          if (-not (Test-Path $script)) { Write-Error "No existe: $script"; exit 1 }
+
+          $workdir = Split-Path $script
+          Set-Location $workdir
+          Write-Host "PWD: $(Get-Location)"
+
+          $log = Join-Path $logDir "one_new.log"
+
+          # Ejecutar en primer plano, unbuffered, y duplicar stdout+stderr a consola y archivo
+          & $env:PYTHON_PATH -u "$script" 2>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          Write-Host "ExitCode=$code"
+          "ExitCode=$code" | Out-File -FilePath (Join-Path $logDir "one_new_exitcode.txt")
+          if ($code -ne 0) { Write-Error "El script devolvió código $code" }
+
+      - name: Subir logs como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-logs
+          path: C:\Temp\RunnerLogs\*
+          if-no-files-found: warn

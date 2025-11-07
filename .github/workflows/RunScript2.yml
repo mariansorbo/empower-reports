@@ -1,0 +1,63 @@
+name: Launch GUI Script (con log)
+
+on:
+  workflow_dispatch:
+
+env:
+  SCRIPT_TO_RUN: "C:\\Users\\Mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new.py"
+  TASK_NAME: "LanzarAppGUI"
+  LOG_DIR: "C:\\Scripts\\logs"
+  LAUNCH_DELAY_SEC: 5
+
+jobs:
+  launch:
+    runs-on: [self-hosted, windows, gui]
+    defaults: { run: { shell: powershell } }
+
+    steps:
+      - name: Preparar carpeta de logs
+        run: |
+          New-Item -ItemType Directory -Force -Path "${{ env.LOG_DIR }}" | Out-Null
+
+      - name: Configurar acción de ${{ env.TASK_NAME }} con redirección a log
+        run: |
+          # Resolver python.exe y armar log con timestamp
+          $py = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+          if (-not $py) { throw "No se encontró python.exe en PATH" }
+
+          $script   = "${{ env.SCRIPT_TO_RUN }}"
+          $logDir   = "${{ env.LOG_DIR }}"
+          $ts       = Get-Date -Format 'yyyyMMdd_HHmmss'
+          $logFile  = Join-Path $logDir ("script_" + $ts + ".log")
+
+          Write-Host "Configurando ${{ env.TASK_NAME }}:"
+          Write-Host "  Script:  $script"
+          Write-Host "  Log:     $logFile"
+
+          # cmd.exe /c "python.exe "script.py" > "log" 2>&1"
+          $args = '/c "' + $py + ' "' + $script + '" > "' + $logFile + '" 2>&1"'
+          $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument $args
+
+          Set-ScheduledTask -TaskName "${{ env.TASK_NAME }}" -Action $action
+
+          # Guardar ruta del log para el siguiente step
+          "LOGFILE=$logFile" | Out-File -Append -FilePath $env:GITHUB_ENV
+
+      - name: Disparar ${{ env.TASK_NAME }}
+        run: |
+          $t = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds($env:LAUNCH_DELAY_SEC))
+          Set-ScheduledTask -TaskName "${{ env.TASK_NAME }}" -Trigger $t
+          Start-ScheduledTask -TaskName "${{ env.TASK_NAME }}"
+          Write-Host "Lanzado ${{ env.SCRIPT_TO_RUN }}; la app queda viva fuera del job."
+
+      # Opcional: mostrar un tail del log (si el script escribe algo rápido)
+      - name: Tail rápido del log (opcional)
+        if: always()
+        run: |
+          Start-Sleep -Seconds 6
+          if (Test-Path "$env:LOGFILE") {
+            Write-Host "---- Tail de $env:LOGFILE ----"
+            Get-Content "$env:LOGFILE" -Tail 200
+          } else {
+            Write-Host "Log aún no creado: $env:LOGFILE"
+          }

@@ -1,0 +1,13 @@
+name: Test Runner
+
+on:
+  workflow_dispatch:   # Esto habilita el botón "Run workflow"
+
+jobs:
+  ping:
+    runs-on: [self-hosted, windows, gui]
+    steps:
+      - name: Hola desde la VM
+        shell: pwsh
+        run: |
+          Write-Output "Runner OK en $env:COMPUTERNAME con usuario $env:USERNAME"

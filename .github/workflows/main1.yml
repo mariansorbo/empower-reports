@@ -1,0 +1,97 @@
+name: Ejecutar Script de Reportes en VM Windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-python-script:
+    runs-on: [self-hosted, windows, gui]
+
+    # Fuerza UTF-8 y salida sin buffer para todo el job
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      PYTHONUNBUFFERED: "1"
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      # 1) Checkout
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # 2) Python 3.10 (actions/setup-python expone $env:PythonLocation)
+      - name: Configurar Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3) Dependencias (si existe requirements.txt en esa carpeta)
+      - name: Instalar dependencias de Python
+        run: |
+          $req = Join-Path $env:GITHUB_WORKSPACE 'DMV Automation - 10 Jun V2\requirements.txt'
+          & "$env:PythonLocation\python.exe" -m pip install --upgrade pip
+          if (Test-Path $req) {
+            & "$env:PythonLocation\python.exe" -m pip install -r $req
+          } else {
+            Write-Host "No hay requirements.txt; continúo…"
+          }
+
+      # 4) Ejecutar el script y guardar/imprimir logs
+      - name: Ejecutar One_new.py (con logging)
+        id: run_script
+        working-directory: "${{ github.workspace }}/DMV Automation - 10 Jun V2"
+        run: |
+          $logDir = "C:\Temp\RunnerLogs"
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+          $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
+          $logFile = Join-Path $logDir "one_new_${ts}.log"
+          Write-Host "[INFO] Log -> $logFile"
+
+          # Ejecuta Python del setup (ruta estable) y duplica stdout+stderr
+          & "$env:PythonLocation\python.exe" -u ".\Test.py" 2>&1 | Tee-Object -FilePath $logFile
+          $code = $LASTEXITCODE
+
+          if ($code -ne 0) {
+            Write-Host ""
+            Write-Host "------ TRACEBACK (desde archivo) ------"
+            Get-Content $logFile
+            Write-Host "---------------------------------------"
+            throw "One_new.py falló con exit code $code"
+          }
+
+          "LOGFILE=$logFile" | Out-File -Append -FilePath $env:GITHUB_ENV
+
+      # 5) Mostrar un tail del log en el resumen del job
+      - name: Tail del log en Summary
+        if: always()
+        run: |
+          $logFile = "$env:LOGFILE"
+          if (Test-Path $logFile) {
+            $tail = (Get-Content $logFile -Tail 200) -join "`n"
+            $md = @()
+            $md += "### Tail del log (`$logFile`)"
+            $md += ""
+            $md += "```text"
+            $md += $tail
+            $md += "```"
+            $md -join "`n" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          } else {
+            "No se encontró LOGFILE ($env:LOGFILE)" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+          }
+
+      # 6) Subir el log completo como artifact descargable
+      - name: Subir logs como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-logs-${{ github.run_id }}
+          path: |
+            ${{ env.LOGFILE }}
+            C:\Temp\RunnerLogs\*.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,64 @@
+name: Run One_new.py on VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_seconds:
+        description: "Esperar X segundos antes de cerrar (0 = no esperar)"
+        required: false
+        default: "0"
+
+defaults:
+  run:
+    shell: powershell   # Windows PowerShell 5.1
+
+jobs:
+  run-on-vm:
+    runs-on: [self-hosted, windows, gui]
+    timeout-minutes: 60
+
+    steps:
+      - name: Info de entorno
+        run: |
+          Write-Output "VM: $env:COMPUTERNAME  Usuario: $env:USERNAME"
+
+      - name: Resolver ruta de Python (compatible con PS 5.1)
+        run: |
+          $py = ""
+          $cmd = Get-Command py.exe -ErrorAction SilentlyContinue
+          if ($cmd) { $py = $cmd.Source }
+
+          if (-not $py) {
+            $candidatos = @(
+              "C:\Python311\python.exe",
+              "C:\Program Files\Python311\python.exe",
+              "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+            )
+            foreach ($c in $candidatos) {
+              if (Test-Path $c) { $py = $c; break }
+            }
+          }
+
+          if (-not $py) { Write-Error "No se encontró Python. Instalalo o ajustá la ruta en este paso."; exit 1 }
+
+          & $py -V
+          "PY_PATH=$py" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Ejecutar One_new.py en la sesión activa
+        run: |
+          $script = "C:\Users\Mariano\Documents\DMV Automation - 10 Jun V2\One_new.py"
+          if (-not (Test-Path $script)) { Write-Error "No existe el script: $script"; exit 1 }
+          $workdir = Split-Path $script
+
+          $isLauncher = (Split-Path -Leaf $env:PY_PATH) -ieq "py.exe"
+          if ($isLauncher) {
+            Start-Process -FilePath $env:PY_PATH -ArgumentList @("-3.11","`"$script`"") -WorkingDirectory $workdir
+          } else {
+            Start-Process -FilePath $env:PY_PATH -ArgumentList @("`"$script`"") -WorkingDirectory $workdir
+          }
+
+          $wait = [int]"${{ github.event.inputs.wait_seconds }}"
+          if ($wait -gt 0) {
+            Write-Output "Esperando $wait s para que el proceso haga su trabajo..."
+            Start-Sleep -Seconds $wait
+          }

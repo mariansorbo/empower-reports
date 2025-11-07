@@ -1,0 +1,186 @@
+name: Launch GUI Script V2 (bulletproof)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_for_login:
+        description: "Verificar/esperar sesión interactiva de 'mariano' (autologon)"
+        type: boolean
+        default: true
+      force_display:
+        description: "Forzar resolución con NirCmd antes de ejecutar"
+        type: boolean
+        default: true
+      ensure_console:
+        description: "Si la sesión no es 'console', moverla con tscon (auto)"
+        type: boolean
+        default: true
+      tail_log:
+        description: "Mostrar tail del log al final"
+        type: boolean
+        default: true
+
+env:
+  SCRIPT_TO_RUN: "C:\\Users\\mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new-Copy2 (2).py"
+  RUN_AS_USER: "mariano"          # nombre corto (sin .\)
+  NIRCMD_EXE: "C:\\nircmd.exe"
+  RES_W: "1536"
+  RES_H: "864"
+  RES_BPP: "32"
+  TASK_NAME_BASE: "LanzarAppGUI"
+  LOG_DIR: "C:\\Scripts\\logs"
+  TASK_WRAPPER_DIR: "C:\\Scripts\\tasks"   # guardamos el .cmd wrapper acá
+
+jobs:
+  launch:
+    # Debe correrse en el self-hosted runner de la VM Windows (con GUI)
+    runs-on: [self-hosted, windows, gui]
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: (Opcional) Verificar/esperar sesión interactiva de $env:RUN_AS_USER
+        if: ${{ inputs.wait_for_login }}
+        run: |
+          $u = "${env:RUN_AS_USER}"
+          $deadline = (Get-Date).AddMinutes(5)
+          do {
+            $q = (quser | Out-String)
+            if ($q -match "(?im)^[\s>]*$([regex]::Escape($u))\b.*\sActive\b") { 
+              Write-Host "OK: sesión de $u activa"; exit 0 
+            }
+            Start-Sleep 2
+          } while ((Get-Date) -lt $deadline)
+          Write-Host "=== quser ===`n$q"
+          throw "No hay sesión interactiva de '$u'. Corré primero el workflow 1 para que el autologon la cree."
+
+      - name: (Opcional) Forzar resolución con NirCmd (idempotente)
+        if: ${{ inputs.force_display }}
+        run: |
+          if (-not (Test-Path "${env:NIRCMD_EXE}")) { throw "No existe ${env:NIRCMD_EXE}" }
+          & "${env:NIRCMD_EXE}" setdisplay ${env:RES_W} ${env:RES_H} ${env:RES_BPP} 2>$null
+          Write-Host "Resolución forzada a ${env:RES_W}x${env:RES_H}x${env:RES_BPP}"
+
+      - name: (Opcional) Asegurar sesión en CONSOLE (auto-tscon si está en RDP)
+        if: ${{ inputs.ensure_console }}
+        run: |
+          $u = "${env:RUN_AS_USER}"
+          $id = $null; $sess = $null
+          $q = (quser | Out-String)
+          foreach ($line in ($q -split "`r?`n")) {
+            if ($line -match "^[\s>]*$([regex]::Escape($u))\b\s+(\S+)\s+(\d+)\s+Active\b") {
+              $sess = $Matches[1]; $id = $Matches[2]; break
+            }
+          }
+          if (-not $id) { Write-Host "No hallé sesión Active de $u (ya se chequeó antes)."; exit 0 }
+          if ($sess -eq 'console') { Write-Host "Sesión ya está en console; nada que hacer."; exit 0 }
+
+          # Crear tarea efímera en la sesión del usuario para ejecutar tscon <id> /dest:console
+          $tn = "AttachToConsole_$([DateTime]::Now.ToString('yyyyMMdd_HHmmss'))"
+          $start = (Get-Date).AddSeconds(10).ToString('HH:mm')
+          $cmd = "cmd.exe /c tscon $id /dest:console"
+          $pCreate = Start-Process schtasks -ArgumentList @('/Create','/TN',"$tn","/SC","ONCE","/ST","$start","/TR","$cmd","/RL","HIGHEST","/F","/RU","${env:RUN_AS_USER}","/IT") -NoNewWindow -Wait -PassThru
+          if ($pCreate.ExitCode -ne 0) { Write-Host "Aviso: no pude crear tarea de tscon (ExitCode=$($pCreate.ExitCode)). Sigo."; exit 0 }
+          Start-Process schtasks -ArgumentList @('/Run','/TN',"$tn") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue | Out-Null
+          Start-Sleep 5
+          $q2 = (quser | Out-String)
+          if ($q2 -match "(?im)^[\s>]*$([regex]::Escape($u))\b\s+console\s+\d+\s+Active\b") {
+            Write-Host "OK: sesión movida a console."
+          } else {
+            Write-Host "Aviso: no confirmé console; puede seguir funcionando igual."
+          }
+          Start-Process schtasks -ArgumentList @('/Delete','/TN',"$tn",'/F') -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue | Out-Null
+
+      - name: Crear wrapper, registrar y ejecutar tarea interactiva (todo en un paso)
+        id: run_gui
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # --- Resolver Python correctamente ---
+          $usePy = $false
+          $pyLauncher = (Get-Command py.exe -ErrorAction SilentlyContinue).Source
+          if ($pyLauncher) {
+            # Usaremos: "py.exe" -3 "<script>"
+            $pyCmd  = 'py.exe'
+            $pyArgs = '-3'
+            $usePy  = $true
+          } else {
+            $pyExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+            if (-not $pyExe) { throw "No se encontró Python (py.exe ni python.exe) en PATH" }
+            # Usaremos: "<ruta a python.exe>" "<script>"
+            $pyCmd  = '"' + $pyExe + '"'
+            $pyArgs = ''
+          }
+
+          # --- Validar script ---
+          $script = "${env:SCRIPT_TO_RUN}"
+          if (-not (Test-Path $script)) { throw "No existe el script: $script" }
+
+          # --- Rutas / nombres únicos ---
+          New-Item -ItemType Directory -Force -Path "${env:LOG_DIR}" | Out-Null
+          New-Item -ItemType Directory -Force -Path "${env:TASK_WRAPPER_DIR}" | Out-Null
+
+          $ts       = Get-Date -Format 'yyyyMMdd_HHmmss'
+          $taskName = "${env:TASK_NAME_BASE}_$ts"
+          $logFile  = Join-Path "${env:LOG_DIR}" ("script_" + $ts + ".log")
+          $cmdFile  = Join-Path "${env:TASK_WRAPPER_DIR}" ("run_" + $ts + ".cmd")
+          $workDir  = Split-Path $script
+
+          # --- Wrapper .cmd (siempre comillas en ejecutables y rutas con espacios) ---
+          $cmdLines = @(
+            '@echo off'
+            'setlocal'
+            'chcp 65001 >nul'
+            ('cd /d "{0}"' -f $workDir)
+          )
+          if ($usePy) {
+            # "py.exe" -3 "<script>" > "<log>" 2>&1
+            $cmdLines += ('"{0}" {1} "{2}" > "{3}" 2>&1' -f $pyCmd, $pyArgs, $script, $logFile)
+          } else {
+            # "<python.exe>" "<script>" > "<log>" 2>&1
+            $cmdLines += ('{0} "{1}" > "{2}" 2>&1' -f $pyCmd, $script, $logFile)
+          }
+          Set-Content -LiteralPath $cmdFile -Value $cmdLines -Encoding ASCII
+
+          # --- Borrar tarea previa si existe (best-effort) ---
+          $pQ = Start-Process -FilePath schtasks -ArgumentList @('/Query','/TN',"$taskName") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+          if ($pQ -and $pQ.ExitCode -eq 0) {
+            Start-Process schtasks -ArgumentList @('/Delete','/TN',"$taskName",'/F') -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue | Out-Null
+          }
+
+          # --- Crear tarea one-shot interactiva con wrapper ---
+          $start = (Get-Date).AddMinutes(2).ToString('HH:mm')   # evita warning “/ST earlier than current time”
+          $argsCreate = @('/Create','/TN',"$taskName",
+                          '/SC','ONCE','/ST',"$start",
+                          '/TR',"`"$cmdFile`"",
+                          '/RL','HIGHEST','/F','/RU',"${env:RUN_AS_USER}",'/IT')
+          $pCreate = Start-Process -FilePath schtasks -ArgumentList $argsCreate -NoNewWindow -Wait -PassThru
+          if ($pCreate.ExitCode -ne 0) {
+            throw "schtasks /Create falló (ExitCode=$($pCreate.ExitCode)). ¿Está logueado '${env:RUN_AS_USER}'?"
+          }
+
+          # --- Ejecutar ya (independiente del /ST) ---
+          Start-Process schtasks -ArgumentList @('/Run','/TN',"$taskName") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue | Out-Null
+
+          # --- Export para tail ---
+          "LOG_FILE=$logFile"   | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TASK_NAME=$taskName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CMD_FILE=$cmdFile"   | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          Write-Host "OK: tarea '$taskName' creada y lanzada. Log: $logFile"
+
+      - name: (Opcional) Tail del log
+        if: ${{ inputs.tail_log }}
+        run: |
+          $logFile = $env:LOG_FILE
+          for ($i=0; $i -lt 300; $i++) {
+            if (Test-Path $logFile) { break }
+            Start-Sleep 1
+          }
+          if (Test-Path $logFile) {
+            Write-Host "=== Últimas 200 líneas de $logFile ==="
+            Get-Content -LiteralPath $logFile -Tail 200
+          } else {
+            Write-Host "No se encontró el log aún: $logFile"
+          }

@@ -1,0 +1,30 @@
+name: Simple GitHub Runner Workflow
+
+on:
+  push:
+    branches:
+      - main  # Puedes especificar la rama que prefieras (por ejemplo, "main" o "master")
+
+jobs:
+  run_script:
+    runs-on: [self-hosted, windows]  # Usa tu runner auto-hospedado en Windows
+
+    steps:
+      # Paso 1: Verifica que el runner esté en línea y disponible
+      - name: Verificar el estado del runner
+        run: |
+          echo "Verificando que el runner esté listo"
+          echo "Estado del runner: ${{ runner.name }}"
+
+      # Paso 2: Ejecuta un script de PowerShell (o cualquier otro script que tengas)
+      - name: Ejecutar script PowerShell
+        run: |
+          # Aquí puedes poner cualquier comando que quieras ejecutar en tu máquina
+          # Por ejemplo, para ejecutar un script PowerShell que ya tienes en tu runner
+          Write-Host "Ejecutando script en el self-hosted runner"
+          powershell -Command "C:\actions-runner\run.cmd"  # O cualquier otro script que desees ejecutar
+
+      # Paso 3: Realizar cualquier otra acción, como enviar notificaciones, analizar logs, etc.
+      - name: Enviar notificación o analizar logs
+        run: |
+          echo "El script se ejecutó correctamente."

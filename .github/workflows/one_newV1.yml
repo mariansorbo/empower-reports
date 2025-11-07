@@ -1,0 +1,21 @@
+name: Ejecutar One_new.py en VM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-one-new:
+    runs-on: [self-hosted, windows, gui]
+    defaults: { run: { shell: powershell } }
+
+    steps:
+      - name: Seleccionar script One_new.py como target
+        run: |
+          'C:\Users\Mariano\Documents\DMV Automation - 10 Jun V2\One_new.py' | Out-File 'C:\Scripts\target.txt' -Encoding ascii -Force
+
+      - name: Disparar tarea GUI
+        run: |
+          $t = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(5))
+          Set-ScheduledTask -TaskName "LanzarAppGUI" -Trigger $t
+          Start-ScheduledTask -TaskName "LanzarAppGUI"
+          Write-Host "One_new.py lanzado; seguirá abierto aunque termine el job."

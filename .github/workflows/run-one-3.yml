@@ -1,0 +1,66 @@
+name: Run repo script on VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      script_path:
+        description: "Ruta dentro del repo"
+        required: true
+        default: "DMV Automation - 10 Jun V2/One_new.py"
+      wait_seconds:
+        description: "Esperar X seg (para GUI)"
+        required: false
+        default: "0"
+
+defaults:
+  run:
+    shell: powershell
+
+jobs:
+  run-on-vm:
+    runs-on: [self-hosted, windows, gui]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo (incluye LFS si hay PBIX)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Resolver Python (PS 5.1)
+        run: |
+          $py = ""
+          $cmd = Get-Command py.exe -ErrorAction SilentlyContinue
+          if ($cmd) { $py = $cmd.Source }
+          if (-not $py) {
+            $candidatos = @(
+              "C:\Python311\python.exe",
+              "C:\Program Files\Python311\python.exe",
+              "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+            )
+            foreach ($c in $candidatos) { if (Test-Path $c) { $py = $c; break } }
+          }
+          if (-not $py) { Write-Error "No se encontró Python. Ajustá ruta o instalalo."; exit 1 }
+          & $py -V
+          "PY_PATH=$py" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Ejecutar script del repo en la sesión activa
+        run: |
+          $rel = "${{ inputs.script_path }}"
+          $script = Join-Path $env:GITHUB_WORKSPACE $rel
+          if (-not (Test-Path $script)) { Write-Error "No existe: $script"; exit 1 }
+          $workdir = Split-Path $script
+
+          $isLauncher = (Split-Path -Leaf $env:PY_PATH) -ieq "py.exe"
+          if ($isLauncher) {
+            # Inicia GUI sin bloquear el job
+            Start-Process -FilePath $env:PY_PATH -ArgumentList @("-3.11","`"$script`"") -WorkingDirectory $workdir
+          } else {
+            Start-Process -FilePath $env:PY_PATH -ArgumentList @("`"$script`"") -WorkingDirectory $workdir
+          }
+
+          $wait = [int]"${{ inputs.wait_seconds }}"
+          if ($wait -gt 0) {
+            Write-Host "Esperando $wait s para que la GUI haga su trabajo…"
+            Start-Sleep -Seconds $wait
+          }

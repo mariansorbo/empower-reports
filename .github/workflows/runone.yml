@@ -1,0 +1,118 @@
+name: Launch GUI Script V2 (interactive, no-manual-login)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait_for_login:
+        description: "Esperar sesión interactiva de 'mariano' (autologon)"
+        type: boolean
+        default: true
+      force_display:
+        description: "Forzar resolución con NirCmd antes de ejecutar"
+        type: boolean
+        default: true
+      tail_log:
+        description: "Mostrar tail del log al final"
+        type: boolean
+        default: true
+
+env:
+  SCRIPT_TO_RUN: "C:\\Users\\mariano\\Documents\\DMV Automation - 10 Jun V2\\One_new-Copy2 (2).py"
+  TASK_NAME: "LanzarAppGUI"
+  LOG_DIR: "C:\\Scripts\\logs"
+  RUN_AS_USER: "mariano"         # nombre corto (sin .\)
+  NIRCMD_EXE: "C:\\nircmd.exe"
+  RES_W: "1920"
+  RES_H: "1080"
+  RES_BPP: "32"
+
+jobs:
+  launch:
+    runs-on: [self-hosted, windows, gui]
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: (Precondición) Sesión interactiva por autologon (o fallar)
+        if: ${{ inputs.wait_for_login }}
+        run: |
+          $u = "${env:RUN_AS_USER}"
+          $deadline = (Get-Date).AddMinutes(5)
+          do {
+            $q = (quser | Out-String)
+            if ($q -match "^\s*$([regex]::Escape($u))\s+.*\s+Active") {
+              Write-Host "OK: Sesión interactiva de $u presente"
+              exit 0
+            }
+            Start-Sleep -Seconds 3
+          } while ((Get-Date) -lt $deadline)
+          Write-Host "=== quser ===`n$q"
+          throw "No hay sesión interactiva de '$u'. Corré primero el workflow 'Start VM (force display)' para que el autologon la cree."
+
+      - name: (Opcional) Forzar resolución con NirCmd (idempotente)
+        if: ${{ inputs.force_display }}
+        run: |
+          if (-not (Test-Path "${env:NIRCMD_EXE}")) { throw "No existe ${env:NIRCMD_EXE}" }
+          & "${env:NIRCMD_EXE}" setdisplay ${env:RES_W} ${env:RES_H} ${env:RES_BPP} 2>$null
+          Write-Host "Resolución forzada a ${env:RES_W}x${env:RES_H}x${env:RES_BPP}"
+
+      - name: Preparar comando + log
+        id: prep
+        run: |
+          $py = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+          if (-not $py) {
+            $pyLauncher = (Get-Command py.exe -ErrorAction SilentlyContinue).Source
+            if (-not $pyLauncher) { throw "No se encontró Python (python.exe/py.exe) en PATH" }
+            $py = "$pyLauncher -3"
+          }
+
+          $script = "${env:SCRIPT_TO_RUN}"
+          if (-not (Test-Path $script)) { throw "No existe el script: $script" }
+          New-Item -ItemType Directory -Force -Path "${env:LOG_DIR}" | Out-Null
+
+          $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
+          $logFile = Join-Path "${env:LOG_DIR}" ("script_" + $ts + ".log")
+          $workDir = Split-Path $script
+          $cmdCore = "cd /d `"$workDir`" && $py `"$script`" > `"$logFile`" 2>&1"
+
+          # Exportar para siguientes pasos
+          "LOG_FILE=$logFile" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CMD_CORE=$cmdCore" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Log: $logFile"
+          Write-Host "CMD: $cmdCore"
+
+      - name: Crear y ejecutar tarea en la sesión interactiva (schtasks /IT)
+        run: |
+          $tn = "${env:TASK_NAME}"
+          $u  = "${env:RUN_AS_USER}"
+          $cmd= $env:CMD_CORE
+
+          # Hora de inicio unos segundos en el futuro (formato HH:mm)
+          $start = (Get-Date).AddSeconds(15).ToString('HH:mm')
+
+          # Borrar si existe
+          schtasks /Query /TN "$tn" >$null 2>&1
+          if ($LASTEXITCODE -eq 0) { schtasks /Delete /TN "$tn" /F | Out-Null }
+
+          # Crear tarea "one-shot" interactiva (NO pide password, requiere usuario logueado)
+          schtasks /Create /TN "$tn" /SC ONCE /ST "$start" /TR "cmd.exe /c $cmd" /RL HIGHEST /F /RU "$u" /IT
+
+          # Ejecutar ya (por si el reloj nos gana)
+          schtasks /Run /TN "$tn"
+
+      - name: (Opcional) Tail del log
+        if: ${{ inputs.tail_log }}
+        run: |
+          $logFile = $env:LOG_FILE
+          # Esperar a que el log aparezca (hasta 5 min)
+          for ($i=0; $i -lt 300; $i++) {
+            if (Test-Path $logFile) { break }
+            Start-Sleep 1
+          }
+          if (Test-Path $logFile) {
+            Write-Host "=== Últimas 200 líneas de $logFile ==="
+            Get-Content -LiteralPath $logFile -Tail 200
+          } else {
+            Write-Host "No se encontró el log aún: $logFile"
+          }

@@ -1,0 +1,39 @@
+name: Python Click Workflow
+
+on:
+  push:
+    branches:
+      - main  # Trigger this workflow on push to the main branch
+
+jobs:
+  click:
+    runs-on: self-hosted  # Use the self-hosted runner
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # Step 2: Set up Python environment
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      # Step 3: Install required dependencies
+      - name: Install PyAutoGUI
+        run: |
+          pip install pyautogui
+
+      # Step 4: Create the Python script to click in the middle of the screen
+      - name: Create Python script
+        run: |
+          echo 'import pyautogui' > click.py
+          echo 'screen_width, screen_height = pyautogui.size()' >> click.py
+          echo 'center_x, center_y = screen_width / 2, screen_height / 2' >> click.py
+          echo 'pyautogui.click(center_x, center_y)' >> click.py
+
+      # Step 5: Run the Python click script
+      - name: Run Python script to click in the middle of the screen
+        run: |
+          python click.py

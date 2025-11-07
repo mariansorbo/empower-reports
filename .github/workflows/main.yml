@@ -1,0 +1,15 @@
+name: Test Runner
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: powershell   # <- usa Windows PowerShell
+
+jobs:
+  ping:
+    runs-on: [self-hosted, windows, gui]
+    steps:
+      - name: Hola desde la VM
+        run: |
+          Write-Output "Runner OK en $env:COMPUTERNAME con usuario $env:USERNAME"
