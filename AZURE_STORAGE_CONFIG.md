@@ -14,6 +14,7 @@ Create a file named `.env.local` in the root directory with the following conten
 
 ```env
 # ===== Azure Storage Configuration =====
+# NOTA: Este proyecto tiene configurada la conexión a procesadorastorage
 VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT_NAME;AccountKey=YOUR_ACCOUNT_KEY;EndpointSuffix=core.windows.net
 VITE_CONTAINER_NAME=pbits
 

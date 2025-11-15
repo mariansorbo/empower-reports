@@ -5,6 +5,7 @@ Esta guía explica cómo configurar las credenciales de Azure Storage para que l
 ## 📋 Requisitos
 
 - Cuenta de Azure Storage: `YOUR_ACCOUNT_NAME`
+  - **NOTA:** Este proyecto tiene configurada la conexión a `procesadorastorage`
 - Container: `pbits-in`
 - Credenciales de acceso (SAS Token o Connection String)
 
