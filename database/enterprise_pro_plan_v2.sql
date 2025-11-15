@@ -1,5 +1,5 @@
 -- ============================================================================
--- EMPOWER REPORTS - Enterprise Pro Plan (V2)
+-- REPORT TUNER - Enterprise Pro Plan (V2)
 -- ============================================================================
 -- Plan para empresas de consultoría que necesitan gestionar múltiples 
 -- organizaciones (clientes) con separación de metadata y confidencialidad
@@ -611,4 +611,9 @@ PRINT '   - Organizaciones son independientes, sin jerarquía';
 PRINT '   - Metadata completamente separada por organization_id';
 PRINT '   - Usuarios pueden pertenecer a múltiples organizaciones con roles distintos';
 GO
+
+
+
+
+
 

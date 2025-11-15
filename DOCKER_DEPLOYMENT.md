@@ -1,6 +1,6 @@
-# 🐳 Despliegue con Docker - Empower Reports
+# 🐳 Despliegue con Docker - Report Tuner
 
-Esta guía te explica cómo desplegar la aplicación Empower Reports usando Docker en tu VPS de Hostinger.
+Esta guía te explica cómo desplegar la aplicación Report Tuner usando Docker en tu VPS de Hostinger.
 
 ## 📋 Prerrequisitos
 
@@ -220,4 +220,4 @@ Si tienes problemas con el despliegue:
 
 ---
 
-¡Tu aplicación Empower Reports estará lista para usar! 🎉
+¡Tu aplicación Report Tuner estará lista para usar! 🎉

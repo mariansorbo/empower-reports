@@ -343,3 +343,8 @@ Muestra todas las organizaciones gestionadas con:
 - El admin_global puede gestionar todas las orgs vinculadas a su Enterprise Pro
 - Las organizaciones son completamente independientes - no hay jerarquía
 
+
+
+
+
+

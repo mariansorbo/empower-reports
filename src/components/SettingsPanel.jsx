@@ -150,7 +150,7 @@ const SettingsPanel = ({ isOpen, onClose }) => {
             <div className="beta-notice">
               <h3>🎉 Free Beta Version</h3>
               <p>
-                You are currently using Empower Reports for free during the beta phase.
+                You are currently using Report Tuner for free during the beta phase.
                 No payment method is required and there are no charges.
               </p>
             </div>
@@ -203,7 +203,7 @@ const SettingsPanel = ({ isOpen, onClose }) => {
         return (
           <div className="settings-section">
             <h2>Integrations</h2>
-            <p className="settings-description">Connect Empower Reports with other tools (in development)</p>
+            <p className="settings-description">Connect Report Tuner with other tools (in development)</p>
 
             <div className="integration-list">
               <div className="integration-item integration-disabled">

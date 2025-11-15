@@ -1,5 +1,5 @@
 {
-  "name": "empower-reports-alpha",
+  "name": "report-tuner",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@azure/storage-blob": "^12.17.0",
+    "@emailjs/browser": "^4.4.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -22,7 +23,7 @@
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
-    "vite": "^5.0.8",
+    "vite": "^7.2.2",
     "vite-plugin-node-polyfills": "^0.24.0"
   }
 }

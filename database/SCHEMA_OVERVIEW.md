@@ -1,4 +1,4 @@
-# Empower Reports - Resumen del Esquema Simplificado
+# Report Tuner - Resumen del Esquema Simplificado
 
 ## ✅ Lo que quedó (Esencial)
 
@@ -30,59 +30,6 @@
 - `DATABASE_SIMPLE.xlsx` - Todas las tablas con datos dummy
 
 ---
-
-## ❌ Lo que se eliminó (Complejidad innecesaria)
-
-### **Archivos eliminados:**
-- ❌ `ab_testing_system.sql` - A/B testing (se hace con HubSpot)
-- ❌ `geolocation_detection.sql` - Geolocalización (se hace con HubSpot)
-- ❌ `pricing_customization.sql` - Pricing complejo (se hace con Stripe + HubSpot)
-- ❌ `segmentation_and_pricing.sql` - Segmentación (se hace con HubSpot)
-- ❌ `pricing_usage_examples.sql` - Ejemplos de pricing
-- ❌ Todas las guías relacionadas
-
-### **Campos eliminados:**
-- ❌ `organizations.region`, `country`, `industry`, etc. (no necesarios)
-- ❌ `organizations.is_corporation`, `is_non_profit` (HubSpot lo maneja)
-- ❌ `organizations.created_via` (HubSpot lo trackea)
-
-### **Tablas eliminadas:**
-- ❌ `ip_geolocation_cache`
-- ❌ `user_geolocation_history`
-- ❌ `organization_pricing_overrides`
-- ❌ `plan_customizations`
-- ❌ `organization_plan_assignments`
-- ❌ `free_trial_controls`
-- ❌ `organization_trial_extensions`
-- ❌ `pricing_segments`
-- ❌ `region_pricing_rules`
-- ❌ `ab_experiments`
-- ❌ `ab_experiment_variants`
-- ❌ `ab_user_assignments`
-- ❌ `ab_events`
-- ❌ `ab_experiment_results`
-
-**Total eliminado: 14 tablas + ~10 archivos**
-
----
-
-## 🎯 Resultado
-
-### **Antes:** 22 tablas, 15+ archivos SQL
-### **Ahora:** 8 tablas, 6 archivos SQL
-
-### **Complejidad reducida en ~65%**
-
----
-
-## 💡 Ventajas del Esquema Simplificado
-
-1. ✅ **Más fácil de mantener**: Menos código, menos bugs
-2. ✅ **Más fácil de entender**: Solo lo esencial
-3. ✅ **Mejor separación de responsabilidades**: DB hace persistencia, HubSpot hace marketing/analytics
-4. ✅ **Más escalable**: Las herramientas especializadas escalan mejor
-5. ✅ **Menos costos de desarrollo**: No reinventar la rueda
-6. ✅ **Mejor soporte**: HubSpot/Stripe tienen equipos dedicados
 
 ---
 
@@ -140,4 +87,9 @@ Solo maneja lo que realmente necesita:
 Todo lo demás (A/B testing, pricing complejo, analytics) se delega a herramientas especializadas que lo hacen mejor.
 
 **Esto es arquitectura moderna SaaS: usar lo mejor de cada herramienta.**
+
+
+
+
+
 

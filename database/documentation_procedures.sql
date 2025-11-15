@@ -1,5 +1,5 @@
 -- ============================================================================
--- EMPOWER REPORTS - Documentation Procedures
+-- REPORT TUNER - Documentation Procedures
 -- ============================================================================
 -- Stored procedures para gestionar documentación de organizaciones
 -- ============================================================================
@@ -128,4 +128,9 @@ GO
 PRINT 'Procedures de documentacion creados exitosamente';
 PRINT 'Procedures: sp_set_organization_documentation, sp_disable_organization_documentation, sp_remove_organization_documentation';
 GO
+
+
+
+
+
 

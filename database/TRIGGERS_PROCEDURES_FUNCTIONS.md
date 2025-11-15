@@ -667,3 +667,8 @@ Todas las tablas tienen trigger `trg_<tabla>_updated_at` que actualiza `updated_
 - **constraints_and_validations.sql** - Triggers y funciones de validación
 - **useful_queries.sql** - Procedures útiles (archive, change_plan)
 
+
+
+
+
+

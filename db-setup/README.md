@@ -1,6 +1,6 @@
 # 🗄️ Azure SQL Database Setup
 
-Scripts para configurar y conectar la base de datos Azure SQL de Empower Reports.
+Scripts para configurar y conectar la base de datos Azure SQL de Report Tuner.
 
 ## 📋 Pre-requisitos
 
@@ -175,4 +175,9 @@ Una vez creado el schema:
 3. ✅ Conectar frontend a las APIs
 4. ✅ Implementar gestión de organizaciones
 5. ✅ Implementar sistema de suscripciones
+
+
+
+
+
 

@@ -1,4 +1,4 @@
-# Empower Reports - Arquitectura Simplificada
+# Report Tuner - Arquitectura Simplificada
 
 ## 🎯 Filosofía: Simple y Escalable
 
@@ -52,11 +52,6 @@ Historial de todos los cambios:
 - Cancelaciones, reactivaciones
 - Eventos de Stripe
 
-### 7. `reports`
-Reportes subidos:
-- Pueden ser de organización o individuales (plan basic)
-- Estados: `uploaded`, `processing`, `processed`, `failed`
-- Almacenados en Azure Blob Storage
 
 ### 8. `enterprise_pro_managed_organizations` (Opcional)
 Solo para Enterprise Pro:
@@ -163,4 +158,9 @@ EXEC enterprise_pro_plan_v2.sql
 5. **Delegar**: Todo lo demás a herramientas especializadas
 
 **Menos código = menos bugs = más fácil de mantener**
+
+
+
+
+
 

@@ -8,16 +8,16 @@ El sistema de autenticación utiliza un archivo CSV ubicado en `public/data/usua
 
 ```csv
 email,password
-admin@empowerreports.com,admin123
-demo@empowerreports.com,demo123
+admin@reporttuner.com,admin123
+demo@reporttuner.com,demo123
 ```
 
 ### Usuarios Predefinidos
 
 | Email | Contraseña | Descripción |
 |-------|------------|-------------|
-| admin@empowerreports.com | admin123 | Usuario administrador |
-| demo@empowerreports.com | demo123 | Usuario de demostración |
+| admin@reporttuner.com | admin123 | Usuario administrador |
+| demo@reporttuner.com | demo123 | Usuario de demostración |
 
 ## Cómo Funciona
 

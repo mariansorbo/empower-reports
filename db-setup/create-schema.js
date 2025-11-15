@@ -82,7 +82,7 @@ async function executeSQLFile(pool, filePath, fileName) {
 }
 
 async function createSchema() {
-  console.log('🚀 Iniciando creación del schema de Empower Reports\n');
+  console.log('🚀 Iniciando creación del schema de Report Tuner\n');
   
   try {
     console.log('⏳ Conectando a Azure SQL Database...');
@@ -161,4 +161,9 @@ async function createSchema() {
 }
 
 createSchema();
+
+
+
+
+
 

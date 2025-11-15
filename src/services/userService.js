@@ -91,8 +91,8 @@ export const loadUsers = async () => {
     console.error('Error cargando usuarios:', error)
     // Retornar usuarios por defecto si no se puede cargar nada
     const defaultUsers = [
-      { email: 'admin@empowerreports.com', password: 'admin123' },
-      { email: 'demo@empowerreports.com', password: 'demo123' }
+      { email: 'admin@reporttuner.com', password: 'admin123' },
+      { email: 'demo@reporttuner.com', password: 'demo123' }
     ]
     saveUsersToStorage(defaultUsers)
     return defaultUsers

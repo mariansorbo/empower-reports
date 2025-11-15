@@ -1,5 +1,5 @@
 -- ============================================================================
--- EMPOWER REPORTS - State Machine & Workflow Procedures
+-- REPORT TUNER - State Machine & Workflow Procedures
 -- ============================================================================
 -- Procedimientos almacenados, vistas y triggers para manejar el flujo completo
 -- desde creación de usuario hasta gestión de suscripciones y límites

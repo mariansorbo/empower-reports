@@ -22,9 +22,9 @@ const FAQs = ({ onBack }) => {
           <section className="faq-item">
             <div className="faq-icon">📊</div>
             <div className="faq-content">
-              <h2>What exactly does Empower Reports do?</h2>
+              <h2>What exactly does Report Tuner do?</h2>
               <p>
-                Empower Reports converts your Power BI .pbit files into interactive technical documentation, 
+                Report Tuner converts your Power BI .pbit files into interactive technical documentation, 
                 where you can navigate all tables, metrics, relationships and internal dependencies. 
                 Ideal for understanding, auditing or scaling complex models.
               </p>
@@ -36,9 +36,9 @@ const FAQs = ({ onBack }) => {
             <div className="faq-content">
               <h2>Do I need technical knowledge to use it?</h2>
               <p>
-                No. Empower Reports was designed for business, data and development teams. 
+                No. Report Tuner was designed for business, data and development teams. 
                 The interface is simple, and the result is clear and visual. If you know how to use Power BI, 
-                you can understand Empower Reports.
+                you can understand Report Tuner.
               </p>
             </div>
           </section>
@@ -149,7 +149,7 @@ const FAQs = ({ onBack }) => {
                 <li>By contacting us.</li>
               </ul>
               <p>
-                Empower Reports was designed from the beginning as a technical tool focused on security, 
+                Report Tuner was designed from the beginning as a technical tool focused on security, 
                 ideal for teams working with sensitive information but needing documentation and collaboration.
               </p>
             </div>

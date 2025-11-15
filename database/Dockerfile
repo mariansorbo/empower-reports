@@ -1,4 +1,4 @@
-# Dockerfile para SQL Server con Empower Reports Database
+# Dockerfile para SQL Server con Report Tuner Database
 FROM mcr.microsoft.com/mssql/server:2022-latest
 
 # Variables de entorno
@@ -27,4 +27,9 @@ EXPOSE 1433
 
 # Punto de entrada
 ENTRYPOINT ["/usr/src/app/init-db.sh"]
+
+
+
+
+
 

@@ -3,7 +3,7 @@
 # =============================================================================
 # SCRIPT DE DESPLIEGUE PARA VPS
 # =============================================================================
-# Este script automatiza el despliegue de Empower Reports en tu VPS
+# Este script automatiza el despliegue de Report Tuner en tu VPS
 # =============================================================================
 
 set -e  # Salir si hay algún error
@@ -21,7 +21,7 @@ CONTAINER_NAME="empower-reports-app"
 COMPOSE_FILE="docker-compose.prod.yml"
 
 echo -e "${BLUE}================================================${NC}"
-echo -e "${BLUE}   DESPLIEGUE DE EMPOWER REPORTS EN VPS${NC}"
+echo -e "${BLUE}   DESPLIEGUE DE REPORT TUNER EN VPS${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 

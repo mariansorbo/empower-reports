@@ -1,6 +1,6 @@
 
 
-# Flujos Completos - Empower Reports
+# Flujos Completos - Report Tuner
 
 Documentación de flujos principales del sistema con referencias explícitas a triggers, procedures, funciones y tablas involucradas.
 
@@ -11,7 +11,7 @@ Documentación de flujos principales del sistema con referencias explícitas a t
 ### Pasos del flujo
 
 ```
-1. Usuario se registra con Google/LinkedIn
+1. Usuario se registra con AzureAD/LinkedIn
    ↓
 2. Usuario crea organización
    ↓
@@ -698,4 +698,9 @@ Active → Pago Falla → Past Due → ¿Resuelve pago?
 - **constraints_and_validations.sql** - Triggers y funciones de validación
 - **enterprise_pro_plan_v2.sql** - Procedures y funciones de Enterprise Pro
 - **useful_queries.sql** - Procedures útiles (archive, change_plan)
+
+
+
+
+
 

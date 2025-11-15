@@ -1,32 +1,38 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { listReports, deleteReports } from '../services/azureStorageService'
 import './ReportsModal.css'
-
-// Dummy report data with uploader
-const DUMMY_REPORTS = [
-  { id: 1, name: 'Sales Report Q1 2024', date: '2024-01-15', size: '2.5 MB', uploader: 'Gonzalo Figlioli' },
-  { id: 2, name: 'Marketing Analysis', date: '2024-02-20', size: '1.8 MB', uploader: 'Camila Reyes' },
-  { id: 3, name: 'Financial Dashboard', date: '2024-03-10', size: '3.2 MB', uploader: 'Gonzalo Figlioli' },
-  { id: 4, name: 'Inventory Report', date: '2024-03-25', size: '1.5 MB', uploader: 'Tiago Markow' },
-  { id: 5, name: 'Operational KPIs', date: '2024-04-05', size: '2.1 MB', uploader: 'Juan Pérez' },
-  { id: 6, name: 'HR Dashboard', date: '2024-04-20', size: '2.7 MB', uploader: 'María González' },
-  { id: 7, name: 'Q2 Project Analysis', date: '2024-05-15', size: '3.5 MB', uploader: 'Gonzalo Figlioli' },
-  { id: 8, name: 'Procurement Report', date: '2024-05-28', size: '1.9 MB', uploader: 'Tiago Markow' },
-  { id: 9, name: 'Operations Dashboard', date: '2024-06-10', size: '2.1 MB', uploader: 'Camila Reyes' },
-  { id: 10, name: 'Production KPIs', date: '2024-06-22', size: '1.6 MB', uploader: 'Juan Pérez' },
-  { id: 11, name: 'Cost Analysis', date: '2024-07-08', size: '2.8 MB', uploader: 'María González' },
-  { id: 12, name: 'Logistics Report', date: '2024-07-19', size: '2.2 MB', uploader: 'Gonzalo Figlioli' },
-  { id: 13, name: 'Quality Dashboard', date: '2024-08-05', size: '1.7 MB', uploader: 'Tiago Markow' },
-  { id: 14, name: 'Profitability Analysis', date: '2024-08-18', size: '3.2 MB', uploader: 'Camila Reyes' },
-  { id: 15, name: 'Sales Report Q3 2024', date: '2024-09-01', size: '2.4 MB', uploader: 'Gonzalo Figlioli' }
-]
 
 const ReportsModal = ({ isOpen, onClose }) => {
   const { user } = useAuth()
-  const [reports, setReports] = useState(DUMMY_REPORTS)
+  const [reports, setReports] = useState([])
   const [selectedReports, setSelectedReports] = useState(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(new Set())
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [deleteMessage, setDeleteMessage] = useState('')
+
+  // Cargar reportes al abrir el modal
+  useEffect(() => {
+    if (isOpen) {
+      loadReports()
+    }
+  }, [isOpen])
+
+  const loadReports = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await listReports()
+      setReports(data)
+    } catch (err) {
+      console.error('Error loading reports:', err)
+      setError(`Failed to load reports: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleCheckboxChange = (reportId) => {
     setSelectedReports(prev => {
@@ -49,16 +55,40 @@ const ReportsModal = ({ isOpen, onClose }) => {
     setShowDeleteConfirm(true)
   }
 
-  const handleConfirmDelete = () => {
-    // Delete selected reports
-    setReports(prev => prev.filter(report => !pendingDelete.has(report.id)))
-    setSelectedReports(new Set())
-    setPendingDelete(new Set())
-    setShowDeleteConfirm(false)
+  const handleConfirmDelete = async () => {
+    setLoading(true)
+    setDeleteMessage('')
+    try {
+      // Convertir Set de IDs (nombres de blob) a array
+      const blobNames = Array.from(pendingDelete)
+      const results = await deleteReports(blobNames)
+      
+      if (results.failed.length === 0) {
+        setDeleteMessage(`✅ Successfully deleted ${results.success.length} report(s)`)
+        // Recargar la lista de reportes
+        await loadReports()
+      } else {
+        setDeleteMessage(
+          `⚠️ Deleted ${results.success.length} report(s). Failed: ${results.failed.length}`
+        )
+      }
+      
+      setSelectedReports(new Set())
+      setPendingDelete(new Set())
+      setShowDeleteConfirm(false)
+      
+      // Limpiar mensaje después de 3 segundos
+      setTimeout(() => setDeleteMessage(''), 3000)
+    } catch (err) {
+      console.error('Error deleting reports:', err)
+      setError(`Failed to delete reports: ${err.message}`)
+      setShowDeleteConfirm(false)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleCancelDelete = () => {
-    // Just close modal, don't delete anything
     setPendingDelete(new Set())
     setShowDeleteConfirm(false)
   }
@@ -100,7 +130,23 @@ const ReportsModal = ({ isOpen, onClose }) => {
           </div>
 
           <div className="reports-modal-content">
-            {reports.length === 0 ? (
+            {/* Mensajes de error y éxito */}
+            {error && (
+              <div className="error-message" style={{ marginBottom: '16px' }}>
+                ❌ {error}
+              </div>
+            )}
+            {deleteMessage && (
+              <div className="success-message" style={{ marginBottom: '16px' }}>
+                {deleteMessage}
+              </div>
+            )}
+
+            {loading ? (
+              <div className="reports-loading">
+                <p>Loading reports...</p>
+              </div>
+            ) : reports.length === 0 ? (
               <div className="reports-empty">
                 <p>No reports available</p>
               </div>
@@ -158,8 +204,9 @@ const ReportsModal = ({ isOpen, onClose }) => {
                 type="button"
                 className="btn-save-delete"
                 onClick={handleConfirmDelete}
+                disabled={loading}
               >
-                Delete
+                {loading ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

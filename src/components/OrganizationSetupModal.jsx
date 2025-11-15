@@ -13,7 +13,7 @@ const OrganizationSetupModal = ({ isOpen, onClose, onCreateOrganization }) => {
         
         <div className="org-setup-header">
           <div className="org-setup-logo">📊</div>
-          <h2>Bienvenido a Empower Reports</h2>
+          <h2>Bienvenido a Report Tuner</h2>
           <p className="org-setup-subtitle">
             Creá tu espacio de trabajo para comenzar
           </p>

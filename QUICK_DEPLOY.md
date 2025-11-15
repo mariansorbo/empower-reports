@@ -1,4 +1,4 @@
-# ⚡ Guía Rápida de Despliegue - Empower Reports
+# ⚡ Guía Rápida de Despliegue - Report Tuner
 
 Esta es una guía condensada para desplegar rápidamente en tu VPS. Para más detalles, consulta [VPS_DEPLOYMENT_GUIDE.md](VPS_DEPLOYMENT_GUIDE.md).
 
@@ -189,7 +189,7 @@ docker build \
   --build-arg VITE_AZURE_ACCOUNT_NAME=tu_cuenta \
   --build-arg VITE_AZURE_SAS_TOKEN=tu_token_sas \
   --build-arg VITE_CONTAINER_NAME=pbits-in \
-  --build-arg VITE_APP_NAME="Empower Reports" \
+  --build-arg VITE_APP_NAME="Report Tuner" \
   --build-arg VITE_MAX_FILE_SIZE=31457280 \
   -t empower-reports:custom .
 

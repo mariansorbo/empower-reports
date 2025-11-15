@@ -364,3 +364,8 @@ ADD stripe_payment_method_id VARCHAR(255) NULL;
 **✅ Conclusión: Tu DB está lista para Stripe Checkout sin cambios urgentes.**  
 **Solo necesitás agregar tablas cuando habilites features específicas.**
 
+
+
+
+
+

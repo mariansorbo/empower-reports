@@ -1,6 +1,6 @@
 # 🚀 Guía Completa de Despliegue en VPS
 
-Esta guía te llevará paso a paso para desplegar **Empower Reports** en tu VPS usando Docker.
+Esta guía te llevará paso a paso para desplegar **Report Tuner** en tu VPS usando Docker.
 
 ## 📋 Tabla de Contenidos
 
@@ -114,10 +114,10 @@ Contenido del archivo:
 
 ```env
 # Azure Storage Configuration
-VITE_AZURE_ACCOUNT_NAME=procesadorastorage
+VITE_AZURE_ACCOUNT_NAME=YOUR_ACCOUNT_NAME
 VITE_AZURE_SAS_TOKEN=tu_token_sas_aqui
 VITE_CONTAINER_NAME=pbits-in
-VITE_APP_NAME=Empower Reports
+VITE_APP_NAME=Report Tuner
 VITE_MAX_FILE_SIZE=31457280
 ```
 
@@ -134,10 +134,10 @@ cd empower-reports
 
 # Construir con variables de entorno
 docker build \
-  --build-arg VITE_AZURE_ACCOUNT_NAME=procesadorastorage \
+  --build-arg VITE_AZURE_ACCOUNT_NAME=YOUR_ACCOUNT_NAME \
   --build-arg VITE_AZURE_SAS_TOKEN=tu_token_sas \
   --build-arg VITE_CONTAINER_NAME=pbits-in \
-  --build-arg VITE_APP_NAME="Empower Reports" \
+  --build-arg VITE_APP_NAME="Report Tuner" \
   --build-arg VITE_MAX_FILE_SIZE=31457280 \
   -t empower-reports:custom .
 ```
@@ -527,7 +527,7 @@ Después del despliegue, verifica que todo funcione:
 
 ## 🎉 ¡Listo!
 
-Tu aplicación Empower Reports está ahora desplegada en tu VPS y lista para usar.
+Tu aplicación Report Tuner está ahora desplegada en tu VPS y lista para usar.
 
 ### Enlaces Útiles
 

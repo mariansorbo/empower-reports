@@ -244,7 +244,7 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
           </button>
           
           <div className="auth-modal-header">
-            <h2>Acceder a Empower Reports</h2>
+            <h2>Acceder a Report Tuner</h2>
             <p className="auth-modal-subtitle">
               Elegí tu método de autenticación preferido
             </p>
@@ -340,7 +340,7 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
           </button>
           
           <div className="auth-modal-header">
-            <h2>Welcome to Empower Reports</h2>
+            <h2>Welcome to Report Tuner</h2>
             <p className="auth-modal-subtitle">
               Create your workspace or join your team's
             </p>

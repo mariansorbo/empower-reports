@@ -1,4 +1,4 @@
-# Empower Reports Alpha
+# Report Tuner
 
 Una aplicación web MVP para subir archivos .pbit a Azure Blob Storage.
 
@@ -38,7 +38,7 @@ Una aplicación web MVP para subir archivos .pbit a Azure Blob Storage.
 ```env
 VITE_AZURE_STORAGE_CONNECTION_STRING=tu_connection_string_aqui
 VITE_CONTAINER_NAME=pbits-in
-VITE_APP_NAME=Empower Reports Alpha
+VITE_APP_NAME=Report Tuner
 VITE_MAX_FILE_SIZE=31457280
 ```
 

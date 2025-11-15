@@ -1,5 +1,5 @@
 -- ============================================================================
--- EMPOWER REPORTS - Organization Workflow Procedures & Triggers
+-- REPORT TUNER - Organization Workflow Procedures & Triggers
 -- ============================================================================
 -- Procedimientos, triggers y funciones para el flujo UX de creación y unión
 -- a organizaciones según el diseño especificado

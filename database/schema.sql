@@ -1,5 +1,5 @@
 --============================================================================
--- EMPOWER REPORTS - Database Schema (SQL Server)
+-- REPORT TUNER - Database Schema (SQL Server / Azure SQL Database)
 --============================================================================
 -- Sistema SaaS para documentación de reportes de Power BI
 -- Soporta modo Free Trial y planes comerciales (Basic, Teams, Enterprise, Enterprise Pro)
@@ -11,13 +11,34 @@
 -- Ejecutar también:
 --   - organization_workflows.sql (procedimientos de creación/unión)
 --   - state_machine_and_workflows.sql (validaciones y workflows)
+--   - constraints_and_validations.sql (validaciones adicionales)
+--   - documentation_procedures.sql (procedures para documentación)
 --   - enterprise_pro_plan_v2.sql (solo si necesitas Enterprise Pro)
 --============================================================================
+--
+-- ⚠️ IMPORTANTE PARA AZURE SQL DATABASE:
+-- 
+-- Si estás usando Azure SQL Database, la base de datos YA DEBE EXISTIR.
+-- COMENTA o ELIMINA las siguientes líneas antes de ejecutar este script:
+--   - USE master;
+--   - CREATE DATABASE empower_reports;
+--   - USE empower_reports;
+--
+-- En su lugar, asegúrate de estar conectado a tu base de datos de Azure SQL
+-- y cambia el nombre de la base de datos en la línea USE si es necesario.
+--
+-- Para más detalles, consulta: DATABASE_DEPLOYMENT.md
+--============================================================================
 
+-- ============================================================================
+-- CREACIÓN DE BASE DE DATOS (SOLO PARA SQL SERVER LOCAL/DOCKER)
+-- ============================================================================
+-- COMENTAR ESTAS LÍNEAS SI USAS AZURE SQL DATABASE
+-- ============================================================================
 USE master;
 GO
 
--- Crear base de datos si no existe
+-- Crear base de datos si no existe (solo para SQL Server local/Docker)
 IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'empower_reports')
 BEGIN
     CREATE DATABASE empower_reports;
@@ -26,6 +47,15 @@ GO
 
 USE empower_reports;
 GO
+-- ============================================================================
+-- FIN DE CREACIÓN DE BASE DE DATOS
+-- ============================================================================
+--
+-- Para Azure SQL Database:
+-- 1. Conéctate directamente a tu base de datos (ej: report-tuner-db)
+-- 2. NO ejecutes las líneas de arriba (USE master, CREATE DATABASE, etc.)
+-- 3. Ejecuta solo las tablas, vistas, funciones y triggers de abajo
+-- ============================================================================
 
 -- ============================================================================
 -- TABLA: plans
@@ -726,4 +756,3 @@ PRINT '';
 PRINT 'A/B Testing: Se maneja con HubSpot';
 PRINT 'Pricing complejo: Se maneja con Stripe + HubSpot';
 GO
-

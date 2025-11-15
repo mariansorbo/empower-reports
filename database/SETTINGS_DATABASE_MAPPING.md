@@ -684,3 +684,8 @@ Puedo generar:
 7. ✅ Actualizar documentación
 
 **¿Arranco con las 2 tablas críticas primero?**
+
+
+
+
+

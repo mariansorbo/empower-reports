@@ -12,6 +12,7 @@ import FAQs from './components/FAQs'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { OrganizationProvider, useOrganization } from './contexts/OrganizationContext'
 import { useDocumentation } from './hooks/useDocumentation'
+import { sendContactEmailFromForm } from './services/emailService'
 import './App.css'
 
 const AppContent = () => {
@@ -22,6 +23,7 @@ const AppContent = () => {
   const [showOrgSettings, setShowOrgSettings] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [notification, setNotification] = useState(null)
+  const [formSubmitting, setFormSubmitting] = useState(false)
   const { user, logout, isAuthenticated } = useAuth()
   const { needsSetup, currentOrganization, loading: orgLoading, refreshOrganizations, userOrganizations } = useOrganization()
   const { documentationUrl, hasDocumentation, openDocumentation } = useDocumentation()
@@ -73,6 +75,36 @@ const AppContent = () => {
     })
   }
 
+  const handleContactFormSubmit = async (event) => {
+    event.preventDefault()
+    setFormSubmitting(true)
+
+    try {
+      const result = await sendContactEmailFromForm(event)
+      
+      if (result.success) {
+        setNotification({
+          type: 'success',
+          message: '✅ Thank you! Your message has been sent successfully.'
+        })
+        // Limpiar el formulario
+        event.target.reset()
+      } else {
+        setNotification({
+          type: 'error',
+          message: `❌ ${result.message}`
+        })
+      }
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: '❌ An error occurred while sending your message. Please try again.'
+      })
+    } finally {
+      setFormSubmitting(false)
+    }
+  }
+
 
   // If needs setup and authenticated, show WelcomeSetup as full screen
   // Only if not showing the setup modal (to avoid conflict)
@@ -112,7 +144,7 @@ const AppContent = () => {
         <div className="site-header__left">
           <div className="brand">
             <span className="brand__logo">📊</span>
-            <span className="brand__name">Empower <span>Reports</span></span>
+            <span className="brand__name">Report <span>Tuner</span></span>
           </div>
         </div>
         <nav className="site-nav">
@@ -150,30 +182,6 @@ const AppContent = () => {
             }}
           >
             Quiénes somos
-          </a>
-          <a 
-            className="nav-link" 
-            href="#plans"
-            onClick={(e) => {
-              e.preventDefault()
-              if (currentView === 'faqs') {
-                setCurrentView('home')
-                window.location.hash = ''
-                setTimeout(() => {
-                  const element = document.getElementById('plans')
-                  if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  }
-                }, 100)
-              } else {
-                const element = document.getElementById('plans')
-                if (element) {
-                  element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }
-              }
-            }}
-          >
-            Planes
           </a>
           <a 
             className="nav-link" 
@@ -236,7 +244,7 @@ const AppContent = () => {
 
       <main className="hero">
         <section className="hero__left">
-          <h1 className="hero__title">Empower <span>Reports</span></h1>
+          <h1 className="hero__title">Report <span>Tuner</span></h1>
           <p className="hero__subtitle">Document the internal logic of Power BI reports in a clear and navigable way. Empower assessments, analysis and new developments.</p>
 
           <ul className="hero__bullets">
@@ -253,7 +261,7 @@ const AppContent = () => {
         <section className="hero__right">
           <div className="card info">
             <h3>About the .pbit file</h3>
-            <p>The .pbit file is the report template, it contains the model structure but not the data. This way, Empower Reports analyzes your logic without accessing sensitive information.</p>
+            <p>The .pbit file is the report template, it contains the model structure but not the data. This way, Report Tuner analyzes your logic without accessing sensitive information.</p>
           </div>
 
           <div className="card upload">
@@ -294,7 +302,7 @@ const AppContent = () => {
             <div className="about-card">
               <div className="about-icon">🎯</div>
               <h3>Nuestra Misión</h3>
-              <p>Empower Reports nace de la experiencia directa con los desafíos de mantener y comprender modelos complejos de Power BI.</p>
+              <p>Report Tuner nace de la experiencia directa con los desafíos de mantener y comprender modelos complejos de Power BI.</p>
             </div>
             <div className="about-card">
               <div className="about-icon">👥</div>
@@ -305,101 +313,6 @@ const AppContent = () => {
               <div className="about-icon">⚡</div>
               <h3>Nuestra Visión</h3>
               <p>Creamos esta plataforma para hacer visible la lógica detrás de cada modelo, acelerar la colaboración y facilitar el trabajo técnico de quienes construyen reportes día a día.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="plans" className="plans-section">
-        <div className="plans-container">
-          <h2 className="plans-title">Nuestros Planes</h2>
-          <p className="plans-subtitle">Elegí el plan que mejor se adapte a tus necesidades</p>
-          <div className="plans-content">
-            <div className="plan-card">
-              <div className="plan-header">
-                <div className="plan-icon">🎯</div>
-                <h3 className="plan-name">Free Trial</h3>
-                <div className="plan-price">
-                  <span className="price-amount">Gratis</span>
-                </div>
-              </div>
-              <div className="plan-features">
-                <ul>
-                  <li>✓ 14 días de prueba</li>
-                  <li>✓ Hasta 3 reportes</li>
-                  <li>✓ Documentación básica</li>
-                  <li>✓ Análisis de Power Query</li>
-                  <li>✓ Exportación PDF</li>
-                </ul>
-              </div>
-              <button className="btn btn-upgrade">Upgrade</button>
-            </div>
-
-            <div className="plan-card">
-              <div className="plan-header">
-                <div className="plan-icon">💎</div>
-                <h3 className="plan-name">Pro</h3>
-                <div className="plan-price">
-                  <span className="price-currency">$</span>
-                  <span className="price-amount">29</span>
-                  <span className="price-period">/mes</span>
-                </div>
-              </div>
-              <div className="plan-features">
-                <ul>
-                  <li>✓ Reportes ilimitados</li>
-                  <li>✓ Documentación avanzada</li>
-                  <li>✓ Análisis DAX completo</li>
-                  <li>✓ Exportación múltiple</li>
-                  <li>✓ Soporte prioritario</li>
-                </ul>
-              </div>
-              <button className="btn btn-upgrade">Upgrade</button>
-            </div>
-
-            <div className="plan-card plan-featured">
-              <div className="plan-badge">Más Popular</div>
-              <div className="plan-header">
-                <div className="plan-icon">👥</div>
-                <h3 className="plan-name">Teams</h3>
-                <div className="plan-price">
-                  <span className="price-currency">$</span>
-                  <span className="price-amount">79</span>
-                  <span className="price-period">/mes</span>
-                </div>
-              </div>
-              <div className="plan-features">
-                <ul>
-                  <li>✓ Todo lo de Pro</li>
-                  <li>✓ Hasta 10 usuarios</li>
-                  <li>✓ Colaboración en equipo</li>
-                  <li>✓ Gestión de permisos</li>
-                  <li>✓ Workspace compartido</li>
-                  <li>✓ Soporte prioritario</li>
-                </ul>
-              </div>
-              <button className="btn btn-upgrade btn-upgrade-featured">Upgrade</button>
-            </div>
-
-            <div className="plan-card">
-              <div className="plan-header">
-                <div className="plan-icon">🏢</div>
-                <h3 className="plan-name">Enterprise</h3>
-                <div className="plan-price">
-                  <span className="price-amount">Personalizado</span>
-                </div>
-              </div>
-              <div className="plan-features">
-                <ul>
-                  <li>✓ Todo lo de Teams</li>
-                  <li>✓ Usuarios ilimitados</li>
-                  <li>✓ SSO y seguridad avanzada</li>
-                  <li>✓ API de integración</li>
-                  <li>✓ SLA garantizado</li>
-                  <li>✓ Soporte dedicado 24/7</li>
-                </ul>
-              </div>
-              <button className="btn btn-upgrade">Upgrade</button>
             </div>
           </div>
         </div>
@@ -417,40 +330,59 @@ const AppContent = () => {
             </p>
           </div>
           
-          <form className="feedback-form">
+          <form className="feedback-form" onSubmit={handleContactFormSubmit}>
             <div className="form-group">
               <label htmlFor="nombre">Name *</label>
-              <input type="text" id="nombre" name="nombre" required />
+              <input 
+                type="text" 
+                id="nombre" 
+                name="from_name" 
+                required 
+                disabled={formSubmitting}
+              />
             </div>
             
             <div className="form-group">
               <label htmlFor="email">Email *</label>
-              <input type="email" id="email" name="email" required />
+              <input 
+                type="email" 
+                id="email" 
+                name="email" 
+                required 
+                disabled={formSubmitting}
+              />
             </div>
             
             <div className="form-group">
               <label htmlFor="experiencia">Your Experience</label>
               <textarea 
                 id="experiencia" 
-                name="experiencia" 
+                name="message" 
                 rows="4" 
                 placeholder="Tell us what you thought, suggestions, ideas...."
+                disabled={formSubmitting}
               ></textarea>
             </div>
             
-            <button type="submit" className="btn btn-feedback">Send Feedback</button>
+            <button 
+              type="submit" 
+              className="btn btn-feedback"
+              disabled={formSubmitting}
+            >
+              {formSubmitting ? 'Sending...' : 'Send Feedback'}
+            </button>
           </form>
           
           <div className="feedback-footer">
             <p>🧡 Thank you for helping us improve 💛</p>
-            <p>Empower Reports is in beta: your input has a real impact.</p>
+            <p>Report Tuner is in beta: your input has a real impact.</p>
           </div>
         </div>
       </section>
 
       <footer className="site-footer">
-        <div className="footer__brand">Empower Reports</div>
-        <div className="footer__legal">© 2024 Empower Reports. All rights reserved.</div>
+        <div className="footer__brand">Report Tuner</div>
+        <div className="footer__legal">© 2024 Report Tuner. All rights reserved.</div>
       </footer>
 
       <AuthModal 

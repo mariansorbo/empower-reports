@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo -e "${BLUE}================================================${NC}"
-echo -e "${BLUE}   BUILD PERSONALIZADO - EMPOWER REPORTS${NC}"
+echo -e "${BLUE}   BUILD PERSONALIZADO - REPORT TUNER${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 
@@ -43,9 +43,9 @@ echo -e "${YELLOW}con tus propias credenciales de Azure.${NC}"
 echo ""
 
 # Valores por defecto
-DEFAULT_ACCOUNT_NAME="procesadorastorage"
+DEFAULT_ACCOUNT_NAME="YOUR_ACCOUNT_NAME"
 DEFAULT_CONTAINER_NAME="pbits-in"
-DEFAULT_APP_NAME="Empower Reports"
+DEFAULT_APP_NAME="Report Tuner"
 DEFAULT_MAX_FILE_SIZE="31457280"
 DEFAULT_IMAGE_NAME="empower-reports"
 DEFAULT_TAG="custom"

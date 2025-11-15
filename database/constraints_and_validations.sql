@@ -1,5 +1,5 @@
 -- ============================================================================
--- EMPOWER REPORTS - Additional Constraints and Validations
+-- REPORT TUNER - Additional Constraints and Validations
 -- ============================================================================
 -- Constraints adicionales y validaciones para garantizar integridad de datos
 -- según las reglas de negocio
@@ -185,4 +185,7 @@ GO
 
 PRINT '✅ Constraints y validaciones adicionales creadas exitosamente';
 GO
+
+
+
 

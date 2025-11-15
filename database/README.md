@@ -1,6 +1,6 @@
-# Empower Reports - Database Schema (Simplificado)
+# Report Tuner - Database Schema (Simplificado)
 
-Esquema simplificado y modular para el sistema SaaS Empower Reports.
+Esquema simplificado y modular para el sistema SaaS Report Tuner.
 
 ## 📋 Archivos SQL
 
@@ -11,8 +11,9 @@ Esquema simplificado y modular para el sistema SaaS Empower Reports.
 3. **`state_machine_and_workflows.sql`** - Máquina de estados de suscripciones
 4. **`constraints_and_validations.sql`** - Validaciones adicionales
 5. **`documentation_procedures.sql`** - Procedures para gestionar documentación
-6. **`enterprise_pro_plan_v2.sql`** - Enterprise Pro multi-organización (opcional)
-7. **`useful_queries.sql`** - Procedures útiles (opcional)
+6. **`settings_tables_and_procedures.sql`** - Tablas y procedures para Settings (Stripe invoices, integrations) (opcional)
+7. **`enterprise_pro_plan_v2.sql`** - Enterprise Pro multi-organización (opcional)
+8. **`useful_queries.sql`** - Procedures útiles (opcional)
 
 ### **Solo consulta** (no ejecutar)
 
@@ -82,9 +83,10 @@ GO
 | **organization_workflows.sql** | 0 | 2 | 6 | 3 | 1 |
 | **state_machine_and_workflows.sql** | 0 | 4 | 8 | 0 | 2 |
 | **constraints_and_validations.sql** | 0 | 2 | 0 | 3 | 0 |
-| **enterprise_pro_plan_v2.sql** | 1 | 1 | 1 | 5 | 2 |
-| **useful_queries.sql** | 0 | 0 | 2 | 0 | 0 |
-| **TOTAL** | **9** | **15** | **20** | **13** | **7** |
+| **settings_tables_and_procedures.sql** (opcional) | 2 | 2 | 11 | 4 | 2 |
+| **enterprise_pro_plan_v2.sql** (opcional) | 1 | 1 | 1 | 5 | 2 |
+| **useful_queries.sql** (opcional) | 0 | 0 | 2 | 0 | 0 |
+| **TOTAL** | **11** | **17** | **31** | **17** | **9** |
 
 ---
 

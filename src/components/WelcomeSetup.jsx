@@ -7,7 +7,7 @@ const WelcomeSetup = ({ onCreateOrganization }) => {
       <div className="welcome-setup">
         <div className="welcome-setup-header">
           <div className="welcome-logo">📊</div>
-          <h1>Welcome to Empower Reports</h1>
+          <h1>Welcome to Report Tuner</h1>
           <p className="welcome-subtitle">
             Create your workspace to get started
           </p>
