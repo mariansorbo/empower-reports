@@ -43,8 +43,7 @@ echo -e "${YELLOW}con tus propias credenciales de Azure.${NC}"
 echo ""
 
 # Valores por defecto
-# NOTA: Este proyecto tiene configurada la conexión a procesadorastorage
-DEFAULT_ACCOUNT_NAME="YOUR_ACCOUNT_NAME"
+DEFAULT_ACCOUNT_NAME=""
 DEFAULT_CONTAINER_NAME="pbits-in"
 DEFAULT_APP_NAME="Report Tuner"
 DEFAULT_MAX_FILE_SIZE="31457280"

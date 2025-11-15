@@ -114,8 +114,8 @@ Contenido del archivo:
 
 ```env
 # Azure Storage Configuration
-VITE_AZURE_ACCOUNT_NAME=YOUR_ACCOUNT_NAME
-VITE_AZURE_SAS_TOKEN=tu_token_sas_aqui
+VITE_AZURE_ACCOUNT_NAME=
+VITE_AZURE_SAS_TOKEN=
 VITE_CONTAINER_NAME=pbits-in
 VITE_APP_NAME=Report Tuner
 VITE_MAX_FILE_SIZE=31457280
@@ -134,8 +134,8 @@ cd empower-reports
 
 # Construir con variables de entorno
 docker build \
-  --build-arg VITE_AZURE_ACCOUNT_NAME=YOUR_ACCOUNT_NAME \
-  --build-arg VITE_AZURE_SAS_TOKEN=tu_token_sas \
+  --build-arg VITE_AZURE_ACCOUNT_NAME= \
+  --build-arg VITE_AZURE_SAS_TOKEN= \
   --build-arg VITE_CONTAINER_NAME=pbits-in \
   --build-arg VITE_APP_NAME="Report Tuner" \
   --build-arg VITE_MAX_FILE_SIZE=31457280 \
@@ -404,8 +404,8 @@ Verifica que las variables de entorno de Azure están correctas:
 # Si construiste la imagen en el VPS
 # Reconstruye con las variables correctas
 docker build \
-  --build-arg VITE_AZURE_ACCOUNT_NAME=tu_account \
-  --build-arg VITE_AZURE_SAS_TOKEN=tu_token \
+  --build-arg VITE_AZURE_ACCOUNT_NAME= \
+  --build-arg VITE_AZURE_SAS_TOKEN= \
   --build-arg VITE_CONTAINER_NAME=pbits-in \
   -t empower-reports:custom .
 ```

@@ -186,8 +186,8 @@ cd empower-reports
 
 # Construir con tus variables
 docker build \
-  --build-arg VITE_AZURE_ACCOUNT_NAME=tu_cuenta \
-  --build-arg VITE_AZURE_SAS_TOKEN=tu_token_sas \
+  --build-arg VITE_AZURE_ACCOUNT_NAME= \
+  --build-arg VITE_AZURE_SAS_TOKEN= \
   --build-arg VITE_CONTAINER_NAME=pbits-in \
   --build-arg VITE_APP_NAME="Report Tuner" \
   --build-arg VITE_MAX_FILE_SIZE=31457280 \

@@ -14,8 +14,7 @@ Create a file named `.env.local` in the root directory with the following conten
 
 ```env
 # ===== Azure Storage Configuration =====
-# NOTA: Este proyecto tiene configurada la conexión a procesadorastorage
-VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT_NAME;AccountKey=YOUR_ACCOUNT_KEY;EndpointSuffix=core.windows.net
+VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=;AccountKey=;EndpointSuffix=core.windows.net
 VITE_CONTAINER_NAME=pbits
 
 # ===== EmailJS Configuration =====
@@ -30,8 +29,8 @@ VITE_EMAILJS_PUBLIC_KEY=your_public_key_here
 Instead of using the connection string, you can use Account Name + SAS Token:
 
 ```env
-VITE_AZURE_ACCOUNT_NAME=YOUR_ACCOUNT_NAME
-VITE_AZURE_SAS_TOKEN=your-sas-token-here
+VITE_AZURE_ACCOUNT_NAME=
+VITE_AZURE_SAS_TOKEN=
 VITE_CONTAINER_NAME=pbits
 ```
 
@@ -72,7 +71,7 @@ Tu template debe tener estas variables configuradas:
 
 ```env
 # Azure Storage
-VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT_NAME;AccountKey=YOUR_ACCOUNT_KEY;EndpointSuffix=core.windows.net
+VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=;AccountKey=;EndpointSuffix=core.windows.net
 VITE_CONTAINER_NAME=pbits
 
 # EmailJS (reemplaza con tus valores reales)
@@ -100,7 +99,7 @@ VITE_EMAILJS_PUBLIC_KEY=aBcDeFgHiJkLmNoPqRsTuV
 ## Container Structure
 
 The application will read .pbit files from:
-- **Storage Account**: `YOUR_ACCOUNT_NAME`
+- **Storage Account**: Configura tu cuenta de Azure Storage
 - **Container**: `pbits`
 - **Files**: All `.pbit` files in the container (including subfolders)
 

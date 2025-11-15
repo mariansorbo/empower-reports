@@ -8,7 +8,7 @@ Write-Host ""
 
 $envContent = @"
 # ===== Azure Storage Configuration =====
-VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT_NAME;AccountKey=YOUR_ACCOUNT_KEY;EndpointSuffix=core.windows.net
+VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=;AccountKey=;EndpointSuffix=core.windows.net
 VITE_CONTAINER_NAME=pbits
 
 # ===== EmailJS Configuration =====

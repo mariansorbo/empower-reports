@@ -4,8 +4,7 @@ Esta guía explica cómo configurar las credenciales de Azure Storage para que l
 
 ## 📋 Requisitos
 
-- Cuenta de Azure Storage: `YOUR_ACCOUNT_NAME`
-  - **NOTA:** Este proyecto tiene configurada la conexión a `procesadorastorage`
+- Cuenta de Azure Storage: Configura tu cuenta de Azure Storage
 - Container: `pbits-in`
 - Credenciales de acceso (SAS Token o Connection String)
 
@@ -16,7 +15,7 @@ Esta guía explica cómo configurar las credenciales de Azure Storage para que l
 ### Paso 1: Generar SAS Token
 
 1. Ve al Azure Portal
-2. Navega a tu Storage Account: `YOUR_ACCOUNT_NAME`
+2. Navega a tu Storage Account en Azure Portal
 3. Ve a **Security + networking** → **Shared access signature**
 4. Configura los permisos:
    - ✅ **Read** (r)
@@ -36,8 +35,8 @@ Crea un archivo `.env` en la raíz del proyecto:
 
 ```bash
 # Azure Storage Configuration (Frontend)
-VITE_AZURE_ACCOUNT_NAME=YOUR_ACCOUNT_NAME
-VITE_AZURE_SAS_TOKEN=sv=2022-11-02&ss=b&srt=sco&sp=rwdlac&se=2025-12-31T23:59:59Z&spr=https&sig=TU_FIRMA_AQUI
+VITE_AZURE_ACCOUNT_NAME=
+VITE_AZURE_SAS_TOKEN=
 VITE_CONTAINER_NAME=pbits-in
 VITE_APP_NAME=Report Tuner
 VITE_MAX_FILE_SIZE=31457280
@@ -75,7 +74,7 @@ Luego en tu `.env`:
 
 ```bash
 # ⚠️ SOLO PARA DESARROLLO LOCAL - NO SUBIR A GIT
-VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT_NAME;AccountKey=YOUR_ACCOUNT_KEY;EndpointSuffix=core.windows.net
+VITE_AZURE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=;AccountKey=;EndpointSuffix=core.windows.net
 VITE_CONTAINER_NAME=pbits-in
 VITE_APP_NAME=Report Tuner
 VITE_MAX_FILE_SIZE=31457280
