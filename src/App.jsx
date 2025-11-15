@@ -348,34 +348,11 @@ const AppContent = () => {
           <p className="plans-subtitle">Elige el plan que mejor se adapte a tus necesidades</p>
           
           <div className="plans-content">
-            {/* Free Trial Plan */}
+            {/* Pro Plan */}
             <div className="plan-card">
               <div className="plan-header">
-                <div className="plan-icon">🆓</div>
-                <h3 className="plan-name">Free Trial</h3>
-                <div className="plan-price">
-                  <span className="price-amount">$0</span>
-                  <span className="price-period">/mes</span>
-                </div>
-              </div>
-              <div className="plan-features">
-                <ul>
-                  <li>✓ Hasta 3 usuarios</li>
-                  <li>✓ Hasta 5 reportes</li>
-                  <li>✓ Documentación básica</li>
-                  <li>✓ Soporte por email</li>
-                </ul>
-              </div>
-              <button className="btn-upgrade" onClick={handleAuthClick}>
-                Comenzar Gratis
-              </button>
-            </div>
-
-            {/* Basic Plan */}
-            <div className="plan-card">
-              <div className="plan-header">
-                <div className="plan-icon">📊</div>
-                <h3 className="plan-name">Basic</h3>
+                <div className="plan-icon">⭐</div>
+                <h3 className="plan-name">Pro</h3>
                 <div className="plan-price">
                   <span className="price-currency">$</span>
                   <span className="price-amount">29</span>
@@ -384,14 +361,14 @@ const AppContent = () => {
               </div>
               <div className="plan-features">
                 <ul>
-                  <li>✓ Hasta 10 usuarios</li>
-                  <li>✓ Hasta 20 reportes</li>
+                  <li>✓ Hasta 3 usuarios</li>
+                  <li>✓ Hasta 50 reportes</li>
                   <li>✓ Documentación completa</li>
                   <li>✓ Soporte prioritario</li>
                 </ul>
               </div>
               <button className="btn-upgrade" onClick={handleAuthClick}>
-                Elegir Basic
+                Elegir Pro
               </button>
             </div>
 
@@ -409,8 +386,8 @@ const AppContent = () => {
               </div>
               <div className="plan-features">
                 <ul>
-                  <li>✓ Hasta 50 usuarios</li>
-                  <li>✓ Reportes ilimitados</li>
+                  <li>✓ Hasta 10 usuarios</li>
+                  <li>✓ Hasta 300 reportes</li>
                   <li>✓ Documentación avanzada</li>
                   <li>✓ Integración Power BI</li>
                   <li>✓ Soporte 24/7</li>
@@ -427,6 +404,31 @@ const AppContent = () => {
                 <div className="plan-icon">🏢</div>
                 <h3 className="plan-name">Enterprise</h3>
                 <div className="plan-price">
+                  <span className="price-currency">$</span>
+                  <span className="price-amount">199</span>
+                  <span className="price-period">/mes</span>
+                </div>
+              </div>
+              <div className="plan-features">
+                <ul>
+                  <li>✓ Hasta 50 usuarios</li>
+                  <li>✓ Reportes ilimitados</li>
+                  <li>✓ API Access</li>
+                  <li>✓ SSO & Security</li>
+                  <li>✓ Account Manager</li>
+                </ul>
+              </div>
+              <button className="btn-upgrade" onClick={handleAuthClick}>
+                Elegir Enterprise
+              </button>
+            </div>
+
+            {/* Enterprise Pro Plan */}
+            <div className="plan-card">
+              <div className="plan-header">
+                <div className="plan-icon">🚀</div>
+                <h3 className="plan-name">Enterprise Pro</h3>
+                <div className="plan-price">
                   <span className="price-amount">Custom</span>
                 </div>
               </div>
@@ -434,9 +436,10 @@ const AppContent = () => {
                 <ul>
                   <li>✓ Usuarios ilimitados</li>
                   <li>✓ Reportes ilimitados</li>
-                  <li>✓ API Access</li>
-                  <li>✓ SSO & Security</li>
-                  <li>✓ Account Manager</li>
+                  <li>✓ Multi-organización (5 orgs)</li>
+                  <li>✓ API Access completo</li>
+                  <li>✓ SSO & Security avanzado</li>
+                  <li>✓ Account Manager dedicado</li>
                 </ul>
               </div>
               <button className="btn-upgrade" onClick={handleAuthClick}>
