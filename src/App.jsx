@@ -512,6 +512,18 @@ const AppContent = () => {
         </div>
       </section>
 
+      <section className="thanks-section">
+        <div className="thanks-container">
+          <div className="thanks-content">
+            <div className="thanks-icon">💕</div>
+            <p className="thanks-text">
+              Con todo mi amor y agradecimiento a mi mamá <span className="thanks-name">Gaby</span>
+            </p>
+            <p className="thanks-subtext">Por tu apoyo infinito y por creer en mí siempre</p>
+          </div>
+        </div>
+      </section>
+
       <footer className="site-footer">
         <div className="footer__brand">Report Tuner</div>
         <div className="footer__legal">© 2024 Report Tuner. All rights reserved.</div>

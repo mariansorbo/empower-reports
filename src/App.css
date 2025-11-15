@@ -8,6 +8,8 @@
   --bg-panel: #F9F9F9;
   --border-light: #EEEEEE;
   --border-medium: #CCCCCC;
+  --pink-primary: #FFB6C1;
+  --pink-light: #FFE4E1;
 }
 
 * { 
@@ -286,6 +288,70 @@
   font-size: 1.125rem;
 }
 
+/* Thanks Section */
+.thanks-section {
+  background: linear-gradient(135deg, var(--pink-light) 0%, #FFF0F5 100%);
+  padding: 60px 40px;
+  text-align: center;
+  margin-top: 80px;
+}
+
+.thanks-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.thanks-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.thanks-icon {
+  font-size: 3rem;
+  margin-bottom: 8px;
+}
+
+.thanks-text {
+  font-size: 1.5rem;
+  color: var(--text-dark);
+  font-weight: 500;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.thanks-name {
+  color: var(--pink-primary);
+  font-weight: 700;
+  font-size: 1.6rem;
+}
+
+.thanks-subtext {
+  font-size: 1.125rem;
+  color: var(--text-medium);
+  margin: 0;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .thanks-section {
+    padding: 40px 20px;
+  }
+  
+  .thanks-text {
+    font-size: 1.25rem;
+  }
+  
+  .thanks-name {
+    font-size: 1.35rem;
+  }
+  
+  .thanks-subtext {
+    font-size: 1rem;
+  }
+}
+
 .site-footer { 
   border-top: 1px solid var(--border-light); 
   padding: 30px 40px; 
@@ -295,7 +361,7 @@
   color: var(--text-muted); 
   font-size: 1.05rem; 
   background: var(--bg-white);
-  margin-top: 60px;
+  margin-top: 0;
   max-width: 100%;
   margin-left: 0;
   margin-right: 0;
