@@ -185,6 +185,30 @@ const AppContent = () => {
           </a>
           <a 
             className="nav-link" 
+            href="#plans"
+            onClick={(e) => {
+              e.preventDefault()
+              if (currentView === 'faqs') {
+                setCurrentView('home')
+                window.location.hash = ''
+                setTimeout(() => {
+                  const element = document.getElementById('plans')
+                  if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }
+                }, 100)
+              } else {
+                const element = document.getElementById('plans')
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }
+              }
+            }}
+          >
+            Planes
+          </a>
+          <a 
+            className="nav-link" 
             href="#contact"
             onClick={(e) => {
               e.preventDefault()
@@ -313,6 +337,111 @@ const AppContent = () => {
               <div className="about-icon">⚡</div>
               <h3>Nuestra Visión</h3>
               <p>Creamos esta plataforma para hacer visible la lógica detrás de cada modelo, acelerar la colaboración y facilitar el trabajo técnico de quienes construyen reportes día a día.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="plans" className="plans-section">
+        <div className="plans-container">
+          <h2 className="plans-title">Planes y Precios</h2>
+          <p className="plans-subtitle">Elige el plan que mejor se adapte a tus necesidades</p>
+          
+          <div className="plans-content">
+            {/* Free Trial Plan */}
+            <div className="plan-card">
+              <div className="plan-header">
+                <div className="plan-icon">🆓</div>
+                <h3 className="plan-name">Free Trial</h3>
+                <div className="plan-price">
+                  <span className="price-amount">$0</span>
+                  <span className="price-period">/mes</span>
+                </div>
+              </div>
+              <div className="plan-features">
+                <ul>
+                  <li>✓ Hasta 3 usuarios</li>
+                  <li>✓ Hasta 5 reportes</li>
+                  <li>✓ Documentación básica</li>
+                  <li>✓ Soporte por email</li>
+                </ul>
+              </div>
+              <button className="btn-upgrade" onClick={handleAuthClick}>
+                Comenzar Gratis
+              </button>
+            </div>
+
+            {/* Basic Plan */}
+            <div className="plan-card">
+              <div className="plan-header">
+                <div className="plan-icon">📊</div>
+                <h3 className="plan-name">Basic</h3>
+                <div className="plan-price">
+                  <span className="price-currency">$</span>
+                  <span className="price-amount">29</span>
+                  <span className="price-period">/mes</span>
+                </div>
+              </div>
+              <div className="plan-features">
+                <ul>
+                  <li>✓ Hasta 10 usuarios</li>
+                  <li>✓ Hasta 20 reportes</li>
+                  <li>✓ Documentación completa</li>
+                  <li>✓ Soporte prioritario</li>
+                </ul>
+              </div>
+              <button className="btn-upgrade" onClick={handleAuthClick}>
+                Elegir Basic
+              </button>
+            </div>
+
+            {/* Teams Plan - Featured */}
+            <div className="plan-card plan-featured">
+              <div className="plan-badge">Más Popular</div>
+              <div className="plan-header">
+                <div className="plan-icon">👥</div>
+                <h3 className="plan-name">Teams</h3>
+                <div className="plan-price">
+                  <span className="price-currency">$</span>
+                  <span className="price-amount">99</span>
+                  <span className="price-period">/mes</span>
+                </div>
+              </div>
+              <div className="plan-features">
+                <ul>
+                  <li>✓ Hasta 50 usuarios</li>
+                  <li>✓ Reportes ilimitados</li>
+                  <li>✓ Documentación avanzada</li>
+                  <li>✓ Integración Power BI</li>
+                  <li>✓ Soporte 24/7</li>
+                </ul>
+              </div>
+              <button className="btn-upgrade btn-upgrade-featured" onClick={handleAuthClick}>
+                Elegir Teams
+              </button>
+            </div>
+
+            {/* Enterprise Plan */}
+            <div className="plan-card">
+              <div className="plan-header">
+                <div className="plan-icon">🏢</div>
+                <h3 className="plan-name">Enterprise</h3>
+                <div className="plan-price">
+                  <span className="price-amount">Custom</span>
+                </div>
+              </div>
+              <div className="plan-features">
+                <ul>
+                  <li>✓ Usuarios ilimitados</li>
+                  <li>✓ Reportes ilimitados</li>
+                  <li>✓ API Access</li>
+                  <li>✓ SSO & Security</li>
+                  <li>✓ Account Manager</li>
+                </ul>
+              </div>
+              <button className="btn-upgrade" onClick={handleAuthClick}>
+                Contactar Ventas
+              </button>
             </div>
           </div>
         </div>
